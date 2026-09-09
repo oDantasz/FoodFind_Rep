@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>FoodFind</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <a class="brand" href="#" onclick="home();return false">🍴 FoodFind</a>
+  <div class="header-actions">
+    <span class="tagline">Descubra restaurantes perto de você</span>
+    <div id="accountArea"></div>
+  </div>
+</header>
+<main>
+  <section class="hero">
+    <div>
+      <b>FOODFIND</b>
+      <h1>Encontre o restaurante perfeito.</h1>
+      <p>Pesquise restaurantes reais perto de você, veja localização, informações e acesse o perfil do estabelecimento.</p>
+    </div>
+  </section>
+
+  <section class="search">
+    <input id="q" placeholder="Ex.: pizza, sushi, hambúrguer" onkeydown="if(event.key==='Enter')loadRestaurants()">
+    <button onclick="loadRestaurants()">🔎 Buscar</button>
+    <button class="secondary" onclick="useMyLocation()">📍 Minha localização</button>
+  </section>
+  <div id="status" class="status"></div>
+
+  <section class="grid" id="homeGrid">
+    <div><div id="map"></div><p class="note">Os restaurantes são consultados em tempo real no OpenStreetMap. A localização usa a permissão do seu navegador.</p></div>
+    <aside><h2>Restaurantes <small id="count"></small></h2><div id="list"><div class="loading">Buscando restaurantes próximos...</div></div></aside>
+  </section>
+  <section id="detail" class="hide"></section>
+</main>
+
+<div id="authModal" class="modal hide" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <button type="button" class="close" id="closeAuthBtn" aria-label="Fechar">×</button>
+    <div id="authContent"></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="app.js"></script>
+</body>
+</html>
