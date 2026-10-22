@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>FoodFind</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="styles.css?v=2.3">
+</head>
+<body>
+<header>
+  <a class="brand" href="#" onclick="home();return false">🍴 FoodFind</a>
+  <div class="header-actions">
+    <span class="tagline">Descubra restaurantes perto de você</span>
+    <div id="accountArea"></div>
+  </div>
+</header>
+<main>
+  <section class="hero">
+    <div>
+      <b>FOODFIND</b>
+      <h1>Encontre o restaurante perfeito.</h1>
+      <p>Pesquise restaurantes reais perto de você, veja localização, informações e acesse o perfil do estabelecimento.</p>
+    </div>
+  </section>
+
+  <section class="search">
+    <input id="q" placeholder="Ex.: pizza, sushi, hambúrguer" onkeydown="if(event.key==='Enter')loadRestaurants()">
+    <button onclick="loadRestaurants()">🔎 Buscar</button>
+    <button class="secondary" onclick="useMyLocation()">📍 Minha localização</button>
+  </section>
+  <div id="status" class="status"></div>
+
+  <section class="grid" id="homeGrid">
+    <div class="map-col"><div id="map"></div><p class="note">Os restaurantes vêm do OpenStreetMap e dos cadastros feitos no FoodFind. A localização usa a permissão do seu navegador.</p></div>
+    <aside><h2>Restaurantes <small id="count"></small></h2><div id="list"><div class="loading">Buscando restaurantes próximos...</div></div></aside>
+  </section>
+  <section id="detail" class="hide"></section>
+
+  <section id="panel" class="hide">
+    <button class="back" onclick="home()">← Voltar</button>
+    <div class="panel-head">
+      <div>
+        <span class="eyebrow">PAINEL DO RESTAURANTE</span>
+        <h1>Meus restaurantes</h1>
+        <p class="mut">Cadastre seu restaurante ou atualize as informações. As alterações aparecem na busca na hora.</p>
+      </div>
+      <button class="primary" onclick="newRestaurant()">+ Cadastrar restaurante</button>
+    </div>
+    <div id="myList" class="my-list"></div>
+
+    <form id="rForm" class="r-form hide" onsubmit="saveRestaurant(event)" novalidate>
+      <div class="form-title">
+        <h2 id="rFormTitle">Novo restaurante</h2>
+        <span id="rLinked" class="linked-badge hide"></span>
+      </div>
+      <div id="rError" class="modal-error hide"></div>
+
+      <fieldset>
+        <legend>1. Informações básicas</legend>
+        <div class="fgrid">
+          <div class="form-group span2"><label for="rName">Nome do restaurante *</label><input id="rName" maxlength="120" placeholder="Ex.: Cantina da Nonna"></div>
+          <div class="form-group"><label for="rCategory">Categoria</label>
+            <select id="rCategory">
+              <option>Restaurante</option><option>Pizzaria</option><option>Lanchonete</option><option>Fast-food</option><option>Café</option>
+              <option>Bar</option><option>Padaria</option><option>Sorveteria</option><option>Doceria</option><option>Outro</option>
+            </select>
+          </div>
+          <div class="form-group"><label for="rPrice">Faixa de preço</label>
+            <select id="rPrice"><option value="">Não informar</option><option value="$">$ · Econômico</option><option value="$$">$$ · Moderado</option><option value="$$$">$$$ · Caro</option><option value="$$$$">$$$$ · Sofisticado</option></select>
+          </div>
+          <div class="form-group span2"><label for="rCuisine">Tipo de culinária</label><input id="rCuisine" maxlength="120" placeholder="Ex.: italiana, massas, pizza"></div>
+          <div class="form-group span2"><label for="rDescription">Descrição</label><textarea id="rDescription" rows="3" maxlength="1500" placeholder="Conte um pouco sobre o restaurante, ambiente, especialidades..."></textarea></div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>2. Site e contatos</legend>
+        <div class="fgrid">
+          <div class="form-group span2"><label for="rWebsite">URL do site (redirecionamento)</label><input id="rWebsite" placeholder="https://www.meurestaurante.com.br"><span class="hint">O botão "Visitar site" no perfil leva o cliente para este endereço.</span></div>
+          <div class="form-group"><label for="rPhone">Telefone</label><input id="rPhone" placeholder="(11) 3333-4444"></div>
+          <div class="form-group"><label for="rWhatsapp">WhatsApp</label><input id="rWhatsapp" placeholder="(11) 99999-8888"></div>
+          <div class="form-group"><label for="rInstagram">Instagram</label><input id="rInstagram" placeholder="@meurestaurante"></div>
+          <div class="form-group"><label for="rDelivery">Link de delivery</label><input id="rDelivery" placeholder="Link do iFood, Rappi, etc."></div>
+          <div class="form-group span2"><label for="rMenuUrl">Link do cardápio completo (opcional)</label><input id="rMenuUrl" placeholder="Link para PDF ou página do cardápio"></div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>3. Localização</legend>
+        <div class="form-group"><label for="rAddress">Endereço</label>
+          <div class="inline">
+            <input id="rAddress" maxlength="300" placeholder="Rua, número, bairro, cidade" onkeydown="if(event.key==='Enter'){event.preventDefault();geocodeAddress()}">
+            <button type="button" class="soft" onclick="geocodeAddress()">Localizar no mapa</button>
+            <button type="button" class="soft" onclick="useMyLocationForForm()">📍 Minha localização</button>
+          </div>
+        </div>
+        <div id="geoResults" class="geo-results hide"></div>
+        <div id="rMap"></div>
+        <p class="hint" id="rCoords">Clique no mapa para marcar onde fica o restaurante. Depois é só arrastar o marcador para ajustar.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>4. Fotos</legend>
+        <div id="photoGrid" class="photo-grid"></div>
+        <label class="upload-btn"><input type="file" accept="image/jpeg,image/png,image/webp" multiple onchange="uploadPhotos(this)">📷 Adicionar fotos</label>
+        <span class="hint">A primeira foto é a capa. Até 12 fotos.</span>
+      </fieldset>
+
+      <fieldset>
+        <legend>5. Horário de funcionamento</legend>
+        <div id="hoursRows" class="hours-rows"></div>
+        <button type="button" class="soft small" onclick="copyFirstDay()">Copiar horário de segunda para todos os dias</button>
+      </fieldset>
+
+      <fieldset>
+        <legend>6. Cardápio</legend>
+        <div id="menuRows" class="menu-rows"></div>
+        <datalist id="sectionList"></datalist>
+        <button type="button" class="soft small" onclick="addMenuItem()">+ Adicionar item</button>
+      </fieldset>
+
+      <div class="form-actions">
+        <button type="button" class="soft" onclick="cancelEdit()">Cancelar</button>
+        <button type="submit" class="primary" id="rSave">Salvar restaurante</button>
+      </div>
+    </form>
+  </section>
+</main>
+
+<div id="authModal" class="modal-overlay hide" onclick="handleOverlayClick(event)">
+  <div class="modal-content">
+    <button class="modal-close" onclick="closeAuthModal()">✕</button>
+    <div class="modal-tabs">
+      <button id="tabLogin" class="tab-btn active" onclick="switchTab('login')">Entrar</button>
+      <button id="tabRegister" class="tab-btn" onclick="switchTab('register')">Criar conta</button>
+    </div>
+    <div id="modalError" class="modal-error hide"></div>
+
+    <form id="formLogin" onsubmit="handleLogin(event)">
+      <h2>Acessar sua conta</h2>
+      <p class="modal-desc">Informe seus dados para entrar no FoodFind.</p>
+
+      <div class="form-group">
+        <label for="loginEmail">E-mail</label>
+        <input type="email" id="loginEmail" placeholder="seu@email.com" required>
+      </div>
+
+      <div class="form-group">
+        <label for="loginPassword">Senha</label>
+        <input type="password" id="loginPassword" placeholder="••••••••" required>
+      </div>
+
+      <button type="submit" class="submit-btn">Entrar</button>
+    </form>
+
+    <form id="formRegister" class="hide" onsubmit="handleRegister(event)">
+      <h2>Criar uma conta</h2>
+      <p class="modal-desc">Cadastre-se para salvar preferências ou gerenciar seu restaurante.</p>
+
+      <div class="form-group">
+        <label>Tipo de conta</label>
+        <div class="role-options">
+          <label class="role-opt"><input type="radio" name="regRole" value="cliente" checked><span>🙋 Cliente<small>Quero encontrar restaurantes</small></span></label>
+          <label class="role-opt"><input type="radio" name="regRole" value="restaurante"><span>🏪 Restaurante<small>Quero cadastrar meu estabelecimento</small></span></label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="regName">Nome completo</label>
+        <input type="text" id="regName" placeholder="Ex.: Pedro Silva" required>
+      </div>
+
+      <div class="form-group">
+        <label for="regEmail">E-mail</label>
+        <input type="email" id="regEmail" placeholder="seu@email.com" required>
+      </div>
+
+      <div class="form-group">
+        <label for="regPassword">Senha</label>
+        <input type="password" id="regPassword" placeholder="Mínimo de 6 caracteres" minlength="6" required>
+      </div>
+
+      <button type="submit" class="submit-btn">Cadastrar</button>
+    </form>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="app.js?v=2.3"></script>
+</body>
+</html>

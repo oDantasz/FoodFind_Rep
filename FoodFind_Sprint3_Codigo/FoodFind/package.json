@@ -1,0 +1,15 @@
+{
+  "name": "foodfind",
+  "version": "2.2.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "sql.js": "^1.14.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

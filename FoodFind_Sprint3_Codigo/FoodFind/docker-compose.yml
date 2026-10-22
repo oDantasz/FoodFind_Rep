@@ -1,0 +1,7 @@
+services:
+  foodfind:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data   # mantém o banco e as fotos mesmo se o container for recriado
