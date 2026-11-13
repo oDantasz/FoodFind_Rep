@@ -14,6 +14,7 @@ const {
 const sec = require('./lib/security');
 const osm = require('./lib/osm');
 const time = require('./lib/time');
+const remote = require('./lib/remote');
 
 const VERSION = pkg.version;
 const PORT = process.env.PORT === undefined ? 3000 : Number(process.env.PORT);
@@ -75,6 +76,11 @@ function currentUser(req) {
   req._user = token
     ? db.get('SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ?', [sec.hashToken(token), Date.now()])
     : null;
+  // Último acesso: atualizado no máximo a cada 30 minutos para não gravar a cada requisição.
+  if (req._user && (!req._user.last_seen_at || Date.now() - Date.parse(req._user.last_seen_at) > 30 * 60 * 1000)) {
+    req._user.last_seen_at = nowIso();
+    db.run('UPDATE users SET last_seen_at = ? WHERE id = ?', [req._user.last_seen_at, req._user.id]);
+  }
   return req._user;
 }
 
@@ -82,7 +88,10 @@ function currentUser(req) {
 function createSession(req, userId) {
   const token = sec.newToken();
   const now = Date.now();
-  db.run('INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)', [sec.hashToken(token), userId, now, now + SESSION_DAYS * 86400000]);
+  db.tx(() => {
+    db.run('INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)', [sec.hashToken(token), userId, now, now + SESSION_DAYS * 86400000]);
+    db.run('UPDATE users SET last_seen_at = ? WHERE id = ?', [new Date(now).toISOString(), userId]);
+  });
   return sec.sessionCookie(req, token, SESSION_DAYS * 86400);
 }
 
@@ -609,7 +618,7 @@ function exportData(user) {
   return {
     exportadoEm: nowIso(),
     aplicacao: `FoodFind ${VERSION}`,
-    conta: { id: user.id, nome: user.name, email: user.email, tipo: user.role, criadaEm: user.created_at, atualizadaEm: user.updated_at },
+    conta: { id: user.id, nome: user.name, email: user.email, tipo: user.role, criadaEm: user.created_at, atualizadaEm: user.updated_at, ultimoAcesso: user.last_seen_at || null },
     sessoesAtivas: db.all('SELECT created_at, expires_at FROM sessions WHERE user_id = ? AND expires_at > ?', [user.id, Date.now()])
       .map(s => ({ criadaEm: new Date(s.created_at).toISOString(), expiraEm: new Date(s.expires_at).toISOString() })),
     avaliacoes: db.all('SELECT place_ref, place_name, rating, comment, created_at, updated_at FROM reviews WHERE user_id = ? ORDER BY created_at', [user.id])
@@ -973,6 +982,66 @@ async function api(req, res, u) {
     return send(res, 200, { claim: claimView(db.get('SELECT * FROM claims WHERE id = ?', [c.id])), restaurantId: `ff-${restaurantId}` });
   }
 
+  // ---------------- Administração: usuários e resumo ----------------
+  if (p === '/api/admin/users' && method === 'GET') {
+    requireAdmin(req);
+    const q = str(u.searchParams.get('q'), 100).toLowerCase();
+    const role = ['cliente', 'restaurante'].includes(u.searchParams.get('role')) ? u.searchParams.get('role') : '';
+    const limit = Math.min(100, Math.max(5, Number(u.searchParams.get('limit')) || 25));
+    const where = [], params = [];
+    if (q) { where.push('(lower(u.name) LIKE ? OR lower(u.email) LIKE ?)'); params.push(`%${q}%`, `%${q}%`); }
+    if (role) { where.push('u.role = ?'); params.push(role); }
+    const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const total = db.get(`SELECT COUNT(*) AS n FROM users u ${w}`, params).n;
+    const pages = Math.max(1, Math.ceil(total / limit));
+    const page = Math.min(pages, Math.max(1, Number(u.searchParams.get('page')) || 1));
+    const rows = db.all(`SELECT u.id, u.name, u.email, u.role, u.created_at, u.last_seen_at,
+        (SELECT COUNT(*) FROM restaurants r WHERE r.owner_id = u.id) AS restaurants,
+        (SELECT COUNT(*) FROM reviews v WHERE v.user_id = u.id) AS reviews,
+        (SELECT COUNT(*) FROM redemptions x WHERE x.user_id = u.id) AS redemptions
+      FROM users u ${w} ORDER BY u.created_at DESC, u.id DESC LIMIT ? OFFSET ?`, [...params, limit, (page - 1) * limit]);
+    return send(res, 200, {
+      users: rows.map(r => ({ id: r.id, name: r.name, email: r.email, role: r.role, isAdmin: isAdmin(r), createdAt: r.created_at, lastSeenAt: r.last_seen_at || null, restaurants: r.restaurants, reviews: r.reviews, redemptions: r.redemptions })),
+      total, page, pages
+    });
+  }
+
+  if (p === '/api/admin/stats' && method === 'GET') {
+    requireAdmin(req);
+    const days = 14;
+    const keys = [];
+    for (let i = days - 1; i >= 0; i--) keys.push(time.toSaoPauloInput(new Date(Date.now() - i * 86400000).toISOString()).slice(0, 10));
+    const visits = Object.fromEntries(db.all('SELECT day, visits FROM visits_daily WHERE day >= ?', [keys[0]]).map(r => [r.day, r.visits]));
+    const byDay = (sql, params) => {
+      const out = Object.fromEntries(keys.map(k => [k, 0]));
+      for (const r of db.all(sql, params)) { const k = time.toSaoPauloInput(r.at).slice(0, 10); if (k in out) out[k] += 1; }
+      return out;
+    };
+    const since = new Date(Date.now() - (days + 1) * 86400000).toISOString();
+    const signups = byDay('SELECT created_at AS at FROM users WHERE created_at >= ?', [since]);
+    const redeemed = byDay('SELECT redeemed_at AS at FROM redemptions WHERE redeemed_at >= ?', [since]);
+    const n = sql => db.get(sql).n;
+    const now = nowIso();
+    const activeSince = new Date(Date.now() - 7 * 86400000).toISOString();
+    return send(res, 200, {
+      totals: {
+        users: n('SELECT COUNT(*) AS n FROM users'),
+        clients: n("SELECT COUNT(*) AS n FROM users WHERE role = 'cliente'"),
+        owners: n("SELECT COUNT(*) AS n FROM users WHERE role = 'restaurante'"),
+        activeLast7Days: db.get('SELECT COUNT(*) AS n FROM users WHERE last_seen_at >= ?', [activeSince]).n,
+        restaurants: n('SELECT COUNT(*) AS n FROM restaurants'),
+        campaignsActive: db.get('SELECT COUNT(*) AS n FROM campaigns WHERE active = 1 AND starts_at <= ? AND ends_at > ?', [now, now]).n,
+        reviews: n('SELECT COUNT(*) AS n FROM reviews'),
+        redemptions: n('SELECT COUNT(*) AS n FROM redemptions'),
+        vouchersUsed: n("SELECT COUNT(*) AS n FROM redemptions WHERE status = 'usado'"),
+        visits: n('SELECT COALESCE(SUM(visits), 0) AS n FROM visits_daily'),
+        pendingClaims: n("SELECT COUNT(*) AS n FROM claims WHERE status = 'pendente'")
+      },
+      days: keys.map(k => ({ day: k, visits: visits[k] || 0, signups: signups[k], redemptions: redeemed[k] })),
+      persistent: db.remoteEnabled()
+    });
+  }
+
   // Recuperação de senha sem e-mail: o administrador gera uma senha temporária.
   if (p === '/api/admin/users/reset-password' && method === 'POST') {
     requireAdmin(req);
@@ -1131,6 +1200,17 @@ async function api(req, res, u) {
     return send(res, 200, await mapCheck());
   }
 
+  // Contagem de visitas: só soma 1 no total do dia (sem IP, sem cookie, sem identificar ninguém).
+  // O front chama uma vez por aba aberta.
+  if (p === '/api/visit' && method === 'POST') {
+    await readBody(req);
+    if (!sec.limits.visit.consume(sec.clientIp(req))) {
+      const day = time.toSaoPauloInput(nowIso()).slice(0, 10);
+      db.run('INSERT INTO visits_daily (day, visits) VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET visits = visits + 1', [day]);
+    }
+    return send(res, 204);
+  }
+
   if (p === '/api/health' && method === 'GET') return send(res, 200, { ok: true, version: VERSION });
 
   throw httpError(404, 'Rota não encontrada.', 'not_found');
@@ -1149,7 +1229,7 @@ async function geocode(q) {
   let data;
   try {
     const r = await fetch(`${base}?format=json&limit=5&countrycodes=br&accept-language=pt-BR&q=${encodeURIComponent(q)}`, {
-      headers: { 'User-Agent': `FoodFind/${VERSION} (projeto academico FATEC Ipiranga)` },
+      headers: { 'User-Agent': `FoodFind/${VERSION} (projeto academico FATEC Ipiranga; +https://github.com/oDantasz/FoodFind_Rep)` },
       signal: AbortSignal.timeout(10000)
     });
     if (!r.ok) throw new Error(`Nominatim HTTP ${r.status}`);
@@ -1173,7 +1253,7 @@ const TILE_SOURCES = [
   { name: 'OpenStreetMap', url: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png` },
   { name: 'Esri', url: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/${z}/${y}/${x}` }
 ];
-const TILE_HEADERS = { 'User-Agent': `FoodFind/${VERSION} (projeto academico FATEC Ipiranga)` };
+const TILE_HEADERS = { 'User-Agent': `FoodFind/${VERSION} (projeto academico FATEC Ipiranga; +https://github.com/oDantasz/FoodFind_Rep)` };
 
 async function fetchTile(src, z, x, y) {
   const r = await fetch(src.url(z, x, y), { headers: TILE_HEADERS, signal: AbortSignal.timeout(8000) });
@@ -1271,7 +1351,7 @@ process.on('unhandledRejection', e => sec.logError('Promessa rejeitada sem trata
 
 async function start() {
   const info = await db.init();
-  osm.setCacheFile(path.join(info.DATA_DIR, 'osm-cache.json'));
+  osm.setCacheFile(path.join(info.DATA_DIR, 'osm-cache.json'), { onSave: data => remote.putFile('osm-cache.json', data) });
   db.acquireLock();
   await ensureAdminAccount();
   const maintenance = setInterval(() => {
@@ -1292,8 +1372,10 @@ async function start() {
   const shutdown = signal => {
     console.log(`Recebido ${signal}; encerrando o FoodFind.`);
     db.releaseLock();
-    srv.close(() => process.exit(0));
-    setTimeout(() => process.exit(0), 3000).unref();
+    // Com DATABASE_URL, garante que a última alteração chegou ao PostgreSQL antes de sair.
+    const done = () => db.closeRemote().catch(() => {}).finally(() => process.exit(0));
+    srv.close(done);
+    setTimeout(() => process.exit(0), db.remoteEnabled() ? 15000 : 3000).unref();
   };
   process.once('SIGTERM', () => shutdown('SIGTERM'));
   process.once('SIGINT', () => shutdown('SIGINT'));

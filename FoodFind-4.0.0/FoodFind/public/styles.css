@@ -1081,3 +1081,43 @@ footer :focus-visible { box-shadow: 0 0 0 2px var(--brasa), 0 0 0 4px var(--most
 @media print { .page-fx, body::before { display: none !important; } }
 /* Âncoras e rolagem não ficam escondidas atrás do cabeçalho flutuante. */
 [id], .deals, aside { scroll-margin-top: calc(var(--header-h) + 12px); }
+
+/* ================================================================ Administração: visão geral e usuários */
+.admin-block { margin: 0 0 28px; }
+.admin-block > h2 { font-size: 1.7rem; margin: 6px 0 12px; }
+.stats { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin: 0 0 14px; }
+.stat { background: var(--papel); border: 1px solid var(--linha); border-radius: 14px; padding: 12px 14px; display: grid; gap: 2px; }
+.stat b { font: 800 2rem/1 var(--letreiro); color: var(--grafite); font-variant-numeric: tabular-nums; }
+.stat span { font-weight: 600; }
+.stat small { color: var(--cinza); }
+.chart { margin: 0; background: var(--papel); border: 1px solid var(--linha); border-radius: 14px; padding: 12px 14px; }
+.chart figcaption { font-weight: 600; margin-bottom: 8px; }
+.bars { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 6px; align-items: end; height: 170px; }
+.bar-col { display: grid; grid-template-rows: auto 1fr auto; height: 100%; align-items: end; justify-items: center; gap: 3px; min-width: 0; }
+.bar-n { font-size: 0.78rem; color: var(--cinza); font-variant-numeric: tabular-nums; }
+.bar { width: 100%; max-width: 30px; height: var(--h, 0%); min-height: 2px; border-radius: 6px 6px 2px 2px; background: linear-gradient(180deg, #d63a17, var(--tomate)); align-self: end; }
+.bar-day { font-size: 0.72rem; color: var(--cinza); white-space: nowrap; }
+.chart-data { margin-top: 10px; }
+.chart-data summary { cursor: pointer; font-weight: 600; color: var(--tomate-escuro); }
+.admin-filters { display: flex; flex-wrap: wrap; gap: 0 12px; align-items: end; }
+.admin-filters .form-group:first-child { flex: 1 1 260px; }
+.table-wrap { overflow-x: auto; background: var(--papel); border: 1px solid var(--linha); border-radius: 14px; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+.data-table th { text-align: left; font-weight: 600; color: var(--cinza); background: var(--creme); padding: 8px 10px; border-bottom: 1px solid var(--linha); white-space: nowrap; }
+.data-table td { padding: 9px 10px; border-bottom: 1px solid var(--linha); vertical-align: middle; }
+.data-table tr:last-child td { border-bottom: 0; }
+.users-table td a { color: var(--grafite); overflow-wrap: anywhere; }
+.role-restaurante { background: var(--mostarda-claro); color: var(--mostarda-texto); }
+.role-cliente { background: var(--azul-claro); color: var(--azul); }
+.pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 12px 0 0; }
+@media (max-width: 760px) {
+  /* Tabela de usuários vira cartões no celular. */
+  .users-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .users-table, .users-table tbody, .users-table tr, .users-table td { display: block; width: 100%; }
+  .users-table tr { padding: 10px 12px; border-bottom: 1px solid var(--linha); }
+  .users-table td { border: 0; padding: 3px 0; display: grid; grid-template-columns: 110px 1fr; gap: 8px; }
+  .users-table td::before { content: attr(data-label); color: var(--cinza); font-size: 0.85rem; }
+  .users-table td:last-child { display: block; padding-top: 8px; }
+  .bars { gap: 3px; height: 140px; }
+  .bar-day { font-size: 0.62rem; }
+}

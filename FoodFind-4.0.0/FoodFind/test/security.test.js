@@ -239,7 +239,7 @@ describe('Segurança e infraestrutura', () => {
       assert.equal(camp.description, 'Antiga', 'descrição vazia recebe o título');
       assert.equal(camp.redemptionCount, 1);
       const db2 = new SQL.Database(fs.readFileSync(path.join(dir, 'foodfind.db')));
-      assert.equal(db2.exec('PRAGMA user_version')[0].values[0][0], 4);
+      assert.equal(db2.exec('PRAGMA user_version')[0].values[0][0], 5);
       const fks = db2.exec('PRAGMA foreign_key_list(campaigns)')[0].values;
       assert.ok(fks.some(v => v.includes('restaurants') && v.includes('CASCADE')));
     } finally { await legacy.stop(); }

@@ -7,8 +7,9 @@
 const fs = require('fs');
 const path = require('path');
 const initSqlJs = require('sql.js');
+const remote = require('./lib/remote');
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 let DATA_DIR = '';
 let DB_FILE = '';
@@ -26,7 +27,8 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   role          TEXT NOT NULL DEFAULT 'cliente' CHECK (role IN ('cliente', 'restaurante')),
   created_at    TEXT NOT NULL,
-  updated_at    TEXT
+  updated_at    TEXT,
+  last_seen_at  TEXT                          -- último acesso logado (atualizado no máximo a cada 30 min)
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -127,6 +129,12 @@ CREATE TABLE IF NOT EXISTS uploads (
   created_at INTEGER NOT NULL
 );
 
+-- Visitas por dia, só o número (sem IP, sem cookie, sem identificar o visitante).
+CREATE TABLE IF NOT EXISTS visits_daily (
+  day    TEXT PRIMARY KEY,                    -- AAAA-MM-DD no horário de São Paulo
+  visits INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_restaurants_owner ON restaurants(owner_id);
@@ -217,6 +225,13 @@ function migrateLegacy() {
   }
 }
 
+// Versão 4 → 5: último acesso do usuário e contagem de visitas por dia.
+function upgradeTo5() {
+  if (!columns('users').includes('last_seen_at')) db.exec('ALTER TABLE users ADD COLUMN last_seen_at TEXT;');
+  db.exec(SCHEMA);
+  db.exec('PRAGMA user_version = 5;');
+}
+
 function resolveDataDir(dir) {
   return path.resolve(dir || process.env.FOODFIND_DATA_DIR || path.join(__dirname, 'data'));
 }
@@ -227,11 +242,15 @@ async function init(dir) {
   UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
   fs.accessSync(DATA_DIR, fs.constants.W_OK);
+  // Hospedagem com disco temporário: baixa a cópia guardada no PostgreSQL antes de abrir o banco.
+  // Se o PostgreSQL não responder, o erro sobe e o processo não inicia com um banco vazio.
+  if (remote.enabled()) await remote.restore(DATA_DIR);
   const SQL = await initSqlJs();
   db = fs.existsSync(DB_FILE) ? new SQL.Database(fs.readFileSync(DB_FILE)) : new SQL.Database();
   db.exec('PRAGMA foreign_keys = ON;');
   const version = get('PRAGMA user_version').user_version;
-  if (version < SCHEMA_VERSION && tableExists('users')) migrateLegacy();
+  if (version < 4 && tableExists('users')) migrateLegacy();
+  else if (version === 4) upgradeTo5();
   else {
     db.exec(SCHEMA);
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
@@ -262,6 +281,7 @@ function save() {
     try { fs.copyFileSync(tmp, DB_FILE); fs.unlinkSync(tmp); }
     catch { throw e; }
   }
+  remote.queueDb(data);
 }
 
 function all(sql, params = []) {
@@ -342,7 +362,8 @@ function activeLock(dir) {
 }
 
 module.exports = {
-  init, all, get, run, tx, changes, save, cleanExpiredSessions, randomCheckCode, SCHEMA_VERSION,
+  init, all, get, run, tx, changes, save,
+  flushRemote: () => remote.flush(), closeRemote: () => remote.close(), remoteEnabled: () => remote.enabled(), cleanExpiredSessions, randomCheckCode, SCHEMA_VERSION,
   acquireLock, releaseLock, activeLock,
   get DATA_DIR() { return DATA_DIR; },
   get DB_FILE() { return DB_FILE; },

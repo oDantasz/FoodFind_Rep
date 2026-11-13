@@ -1716,8 +1716,88 @@ async function deleteAccount() {
 // ----------------------------------------------------------------------------
 // Administração
 // ----------------------------------------------------------------------------
+// ---------------- Administração: visão geral e usuários ----------------
+let adminUsersPage = 1;
+
+function timeAgo(iso) {
+  if (!iso) return 'nunca';
+  const min = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  if (min < 2) return 'agora há pouco';
+  if (min < 60) return `há ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `há ${h} h`;
+  const d = Math.round(h / 24);
+  return d < 30 ? `há ${plural(d, 'dia', 'dias')}` : fmtDate(iso);
+}
+
+async function loadAdminStats() {
+  const box = $('adminStats');
+  box.innerHTML = stateBox('loading', 'Carregando números...');
+  try {
+    const { totals: t, days, persistent } = await apiFetch('/api/admin/stats');
+    const tile = (n, label, sub = '') => `<li class="stat"><b>${n.toLocaleString('pt-BR')}</b><span>${label}</span>${sub ? `<small>${sub}</small>` : ''}</li>`;
+    const max = Math.max(1, ...days.map(d => d.visits));
+    const dayLabel = d => d.day.slice(8, 10) + '/' + d.day.slice(5, 7);
+    const last = days[days.length - 1];
+    box.innerHTML = `${persistent ? '' : '<p class="notice">Os dados estão só no disco deste servidor. Em hospedagens gratuitas (ex.: Render) eles se perdem quando o servidor reinicia; configure DATABASE_URL para guardá-los num PostgreSQL.</p>'}
+      <ul class="stats">
+        ${tile(t.users, 'contas', `${t.clients} clientes · ${t.owners} restaurantes`)}
+        ${tile(t.activeLast7Days, 'ativas nos últimos 7 dias')}
+        ${tile(t.visits, 'visitas no total', `${last.visits} hoje`)}
+        ${tile(t.restaurants, 'restaurantes cadastrados', t.pendingClaims ? `${t.pendingClaims} pedido(s) pendente(s)` : '')}
+        ${tile(t.campaignsActive, 'campanhas ativas agora')}
+        ${tile(t.redemptions, 'benefícios resgatados', `${t.vouchersUsed} usados no caixa`)}
+        ${tile(t.reviews, 'avaliações')}
+      </ul>
+      <figure class="chart" aria-labelledby="chartCap">
+        <figcaption id="chartCap">Visitas por dia nos últimos 14 dias (horário de São Paulo)</figcaption>
+        <div class="bars" aria-hidden="true">${days.map(d => `<div class="bar-col" title="${dayLabel(d)}: ${plural(d.visits, 'visita', 'visitas')}, ${plural(d.signups, 'cadastro', 'cadastros')}"><span class="bar-n">${d.visits || ''}</span><span class="bar" data-h="${Math.round(d.visits / max * 100)}"></span><span class="bar-day">${dayLabel(d)}</span></div>`).join('')}</div>
+        <details class="chart-data"><summary>Ver os números</summary>
+          <table class="data-table"><thead><tr><th scope="col">Dia</th><th scope="col">Visitas</th><th scope="col">Cadastros</th><th scope="col">Resgates</th></tr></thead>
+          <tbody>${days.slice().reverse().map(d => `<tr><td>${dayLabel(d)}</td><td>${d.visits}</td><td>${d.signups}</td><td>${d.redemptions}</td></tr>`).join('')}</tbody></table>
+        </details>
+      </figure>`;
+    // Altura das barras via CSSOM (a CSP não permite atributos style no HTML).
+    box.querySelectorAll('.bar').forEach(b => b.style.setProperty('--h', `${b.dataset.h}%`));
+  } catch (e) { box.innerHTML = stateBox('error', e.message, '<button type="button" class="soft small" data-action="retry-route">Tentar de novo</button>'); }
+}
+
+async function loadAdminUsers(page = 1) {
+  adminUsersPage = page;
+  const box = $('adminUsers');
+  box.innerHTML = stateBox('loading', 'Carregando usuários...');
+  const params = new URLSearchParams({ page, limit: 25 });
+  const q = $('adminUserQ').value.trim(), role = $('adminUserRole').value;
+  if (q) params.set('q', q);
+  if (role) params.set('role', role);
+  try {
+    const data = await apiFetch(`/api/admin/users?${params}`);
+    if (!data.users.length) { box.innerHTML = stateBox('empty', q || role ? 'Nenhuma conta encontrada com esse filtro.' : 'Nenhuma conta cadastrada ainda.'); return; }
+    const roleLabel = u => (u.role === 'restaurante' ? 'Restaurante' : 'Cliente') + (u.isAdmin ? ' · admin' : '');
+    const extra = u => [u.restaurants && plural(u.restaurants, 'restaurante', 'restaurantes'), u.reviews && plural(u.reviews, 'avaliação', 'avaliações'), u.redemptions && plural(u.redemptions, 'benefício', 'benefícios')].filter(Boolean).join(' · ') || '—';
+    box.innerHTML = `<p class="mut">${plural(data.total, 'conta encontrada', 'contas encontradas')}</p>
+      <div class="table-wrap"><table class="data-table users-table">
+        <thead><tr><th scope="col">Nome</th><th scope="col">E-mail</th><th scope="col">Tipo</th><th scope="col">Cadastro</th><th scope="col">Último acesso</th><th scope="col">Atividade</th><th scope="col"><span class="sr-only">Ações</span></th></tr></thead>
+        <tbody>${data.users.map(u => `<tr>
+          <td data-label="Nome"><b>${escapeHtml(u.name)}</b></td>
+          <td data-label="E-mail"><a href="mailto:${escapeHtml(u.email)}">${escapeHtml(u.email)}</a></td>
+          <td data-label="Tipo"><span class="status-badge role-${u.role}">${roleLabel(u)}</span></td>
+          <td data-label="Cadastro">${escapeHtml(fmtDate(u.createdAt))}</td>
+          <td data-label="Último acesso" title="${escapeHtml(fmtDateTime(u.lastSeenAt))}">${escapeHtml(timeAgo(u.lastSeenAt))}</td>
+          <td data-label="Atividade" class="mut">${escapeHtml(extra(u))}</td>
+          <td>${u.isAdmin ? '' : `<button type="button" class="soft small" data-action="reset-for" data-email="${escapeHtml(u.email)}">Redefinir senha</button>`}</td>
+        </tr>`).join('')}</tbody></table></div>
+      ${data.pages > 1 ? `<nav class="pager" aria-label="Páginas de usuários">
+        <button type="button" class="soft small" data-action="admin-users-page" data-page="${data.page - 1}" ${data.page <= 1 ? 'disabled' : ''}>← Anteriores</button>
+        <span>Página ${data.page} de ${data.pages}</span>
+        <button type="button" class="soft small" data-action="admin-users-page" data-page="${data.page + 1}" ${data.page >= data.pages ? 'disabled' : ''}>Próximas →</button></nav>` : ''}`;
+  } catch (e) { box.innerHTML = stateBox('error', e.message, '<button type="button" class="soft small" data-action="retry-route">Tentar de novo</button>'); }
+}
+
 async function openAdmin() {
   showView('admin');
+  loadAdminStats();
+  loadAdminUsers(adminUsersPage);
   const box = $('adminList');
   box.innerHTML = stateBox('loading', 'Carregando pedidos...');
   const status = $('adminFilter').value;
@@ -1784,6 +1864,8 @@ const actions = {
   'geo-deny': () => { store('ff_geo_consent', 'nao'); $('geoBanner').classList.add('hide'); $('addr').focus(); },
   'pick-address': el => pickAddress(Number(el.dataset.i)),
   'clear-filters': clearFilters,
+  'admin-users-page': el => loadAdminUsers(Number(el.dataset.page)),
+  'reset-for': el => { const i = $('resetEmail'); if (!i) return; i.value = el.dataset.email; i.closest('form').scrollIntoView({ behavior: 'smooth', block: 'center' }); i.focus({ preventScroll: true }); },
   'cat-toggle': el => setChip(el, el.getAttribute('aria-pressed') !== 'true'),
   'cat-all': () => { if (!$('fCategory').value) return; clearChips(); loadRestaurants(); },
   'search-area': searchThisArea,
@@ -1876,6 +1958,7 @@ const forms = {
   profile: f => saveProfile(f),
   password: f => changePassword(f),
   'admin-reset': adminReset,
+  'admin-users': () => loadAdminUsers(1),
   confirm: async f => {
     const st = confirmState;
     if (!st) return;
@@ -1986,6 +2069,8 @@ async function boot() {
   // No celular, os filtros começam recolhidos para a lista aparecer antes.
   if (window.matchMedia && window.matchMedia('(max-width: 900px)').matches) $('filtersBox').open = false;
   renderChips();
+  // Conta a visita (só o total do dia, sem identificar ninguém), uma vez por aba.
+  if (!session('ff_visit')) { session('ff_visit', '1'); apiFetch('/api/visit', { method: 'POST', body: '{}' }).catch(() => {}); }
   // Cabeçalho flutuante ganha sombra quando a página rola.
   const onScroll = () => document.body.classList.toggle('scrolled', window.scrollY > 8);
   window.addEventListener('scroll', onScroll, { passive: true }); onScroll();

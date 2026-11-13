@@ -35,7 +35,8 @@ Grupo: Pedro Augusto Dantas Aranda e Vinicius Tofani Siqueira
 | Arquivo | Responsabilidade |
 |---|---|
 | `server.js` | Inicialização, segurança por requisição (cabeçalhos/CSRF), rotas da API, regras de negócio (avaliações, campanhas, vouchers, reivindicação, LGPD), estáticos, tiles, encerramento limpo (SIGTERM) |
-| `db.js` | Esquema v4, migração de bancos 2.2/3, `all/get/run/tx`, gravação atômica, trava `foodfind.lock` |
+| `db.js` | Esquema v5, migração de bancos 2.2/3 e v4, `all/get/run/tx`, gravação atômica, trava `foodfind.lock` |
+| `lib/remote.js` | Opcional (`DATABASE_URL`): restaura e guarda no PostgreSQL a cópia do banco, as fotos e o cache do OSM |
 | `lib/http.js` | `send`, `httpError`, `readBody` (limite de tamanho, JSON obrigatório), `sendFile` assíncrono com gzip e ETag |
 | `lib/validate.js` | `str()`, `cleanUrl()` (só http/https), `cleanInstagram()`, `cleanPhone()`, `cleanHours()`, `cleanMenu()`, `cleanPhotos()` (só fotos do dono), `cleanRestaurant()` |
 | `lib/security.js` | scrypt, token/hash de sessão, cookies, `RateLimiter`, CSP e cabeçalhos, verificação de origem, log sem dados sensíveis |
@@ -52,14 +53,14 @@ Grupo: Pedro Augusto Dantas Aranda e Vinicius Tofani Siqueira
 | `#/campanhas` | Gestão de campanhas, QR, validação de voucher | Restaurante |
 | `#/beneficios` | Meus benefícios (vouchers) | Cliente |
 | `#/conta` | Dados, senha, sair de todos, exportar, excluir | logado |
-| `#/admin` | Reivindicações e redefinição de senha | administrador |
+| `#/admin` | Visão geral, usuários, reivindicações e redefinição de senha | administrador |
 | `#/privacidade`, `#/termos` | Textos legais | todos |
 
 Rotas protegidas abrem o login e voltam para a tela pedida depois de entrar. O link `/?resgatar=CODIGO` é tratado na inicialização (ver seção 3).
 
 ---
 
-## 2. Modelo de dados (esquema versão 4)
+## 2. Modelo de dados (esquema versão 5)
 
 ```
 users 1───* sessions          (ON DELETE CASCADE)
@@ -74,7 +75,7 @@ users 1───* uploads            (CASCADE)
 
 | Tabela | Campos principais | Observações |
 |---|---|---|
-| `users` | id, name, email (único, minúsculo), password_hash (`salt:hash` scrypt), role (`cliente`/`restaurante`), created_at, updated_at | Administrador = e-mail igual a `ADMIN_EMAIL` |
+| `users` | id, name, email (único, minúsculo), password_hash (`salt:hash` scrypt), role (`cliente`/`restaurante`), created_at, updated_at, last_seen_at | Administrador = e-mail igual a `ADMIN_EMAIL`; `last_seen_at` atualizado no login e no máximo a cada 30 min |
 | `sessions` | id, **token_hash** (SHA-256, único), user_id, created_at, expires_at | 30 dias; limpeza na inicialização e a cada hora |
 | `restaurants` | id, owner_id, osm_ref (único, opcional), name, category, cuisine, description, website, phone, whatsapp, instagram, delivery_url, menu_url, price_range, address, lat, lng, hours (JSON), menu (JSON), photos (JSON) | `osm_ref` preenchido quando assumido do OSM |
 | `reviews` | id, **place_ref**, place_name, user_id, rating (1–5), comment (≤ 600), created_at, updated_at | `UNIQUE(place_ref, user_id)` |
@@ -82,19 +83,29 @@ users 1───* uploads            (CASCADE)
 | `redemptions` | id (→ voucher `FF-000123`), campaign_id, user_id, **check_code**, status (`emitido`/`usado`), redeemed_at, used_at | `UNIQUE(campaign_id, user_id)` |
 | `claims` | id, osm_ref, user_id, status (`pendente`/`aprovado`/`recusado`), data (JSON), message, reason, restaurant_id, created_at, decided_at, decided_by | Pedido para assumir restaurante do OSM |
 | `uploads` | file (PK), owner_id, created_at | Dono de cada foto; base para apagar órfãs |
+| `visits_daily` | day (PK, AAAA-MM-DD em São Paulo), visits | Só o total de visitas do dia; sem IP, cookie ou identificação |
 
 Índices: sessões por usuário e expiração; restaurantes por dono; avaliações por lugar/data e por usuário; campanhas por restaurante; resgates por campanha e por usuário; pedidos por status e por lugar; fotos por dono.
 
 ### 2.1 Migração de bancos antigos
 `db.init()` lê `PRAGMA user_version`. Se for menor que 4 e houver tabelas, `migrateLegacy()`:
 1. renomeia as tabelas antigas para `legacy_*`;
-2. cria o esquema v4 (com chaves estrangeiras e índices);
+2. cria o esquema atual (com chaves estrangeiras e índices);
 3. copia usuários, restaurantes (registrando as fotos em `uploads`), avaliações (`restaurant_id` → `place_ref`), campanhas (código em maiúsculas; descrição vazia recebe o título) e resgates (gera código de conferência);
 4. **descarta as sessões** (guardavam o token em texto puro) — os usuários só entram de novo;
-5. apaga `legacy_*` e grava `user_version = 4`. Tudo dentro de uma transação.
+5. apaga `legacy_*` e grava `user_version` da versão atual. Tudo dentro de uma transação.
+
+Da versão 4 para a 5, `upgradeTo5()` acrescenta `users.last_seen_at` e a tabela `visits_daily`.
 
 ### 2.2 Gravação atômica e trava
 `save()` exporta o banco, grava em `foodfind.db.<pid>.tmp`, faz `fsync` e `rename` sobre o arquivo final (no Windows, se o antivírus travar o rename, copia e remove o temporário). O servidor cria `foodfind.lock` ao iniciar e o remove ao receber SIGTERM/SIGINT; o `npm run seed` se recusa a rodar enquanto a trava estiver ativa, porque o servidor mantém o banco em memória e sobrescreveria as alterações.
+
+### 2.3 Persistência externa (PostgreSQL)
+Em hospedagens com disco temporário (Render gratuito), `DATABASE_URL` liga o `lib/remote.js`:
+- **Início**: `db.init()` chama `remote.restore()`, que cria (se preciso) as tabelas `foodfind_snapshot` (cópia do banco, 1 linha) e `foodfind_files` (fotos e `osm-cache.json`), grava esses arquivos na pasta de dados e **assume** a cópia (coluna `owner`). Se o PostgreSQL não responder, o erro interrompe a inicialização.
+- **Alterações**: cada `save()` agenda o envio do banco exportado (o mais recente vence; envios em sequência) e sincroniza a pasta `uploads`. O envio só vale se este processo ainda for o `owner`; senão, ele para de gravar (deploy novo assumiu).
+- **Encerramento**: no SIGTERM o servidor espera a última cópia chegar (até 15 s). O seed também espera antes de sair.
+- O endereço do banco não aparece em log.
 
 ---
 
@@ -169,7 +180,7 @@ Dono                          Servidor                                   Cliente
 
 - `npm test` = `node --test`: seis arquivos em `test/`, cada um sobe `node server.js` em porta livre (`PORT=0`), com pasta de dados temporária (`FOODFIND_DATA_DIR`) e um simulador local de Overpass/Nominatim (`FOODFIND_OVERPASS_URL`/`FOODFIND_NOMINATIM_URL`).
 - O cliente de teste guarda o cookie como um navegador e chama a API por HTTP. Nenhum teste copia funções do código: todos exercitam o servidor real.
-- 69 casos de teste em 6 suítes (o runner também conta o arquivo de apoio `test/_helpers.js`, por isso aparece "tests 70").
+- 78 casos de teste em 8 suítes (o runner também conta o arquivo de apoio `test/_helpers.js`). A suíte de persistência (4 casos) precisa de um PostgreSQL em `FOODFIND_TEST_DATABASE_URL`; sem ela, é pulada e ficam 74 casos.
 - O GitHub Actions roda `npm ci` + `npm test` no Node 20 e constrói/sobe a imagem Docker esperando o healthcheck.
 
 ---

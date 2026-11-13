@@ -29,7 +29,7 @@
 **Tela:** PDF `docs/plano-de-teste.pdf` → terminal.
 - (4:30–5:15) Escopo e estratégia: testes de API/integração automatizados com `node:test` que sobem o **servidor real** com banco temporário e OpenStreetMap simulado; testes de interface e de dispositivo como homologação manual.
 - (5:15–6:00) Matriz: mostrar alguns casos (CT de resgate com todos os erros, CT do segredo do código, CT de cascata) com pré-condições, passos, resultado esperado e critério de aceitação.
-- (6:00–7:00) **Rodar `npm test` ao vivo**: mostrar o final `# pass 70 / # fail 0` (69 casos + arquivo de apoio). Mostrar o GitHub Actions verde (aba *Actions* do repositório).
+- (6:00–7:00) **Rodar `npm test` ao vivo**: mostrar o final com `# fail 0` (74 casos sem PostgreSQL de teste; 78 com `FOODFIND_TEST_DATABASE_URL`). Mostrar o GitHub Actions verde (aba *Actions* do repositório).
 
 ## 4. Demonstração — 6:30 (V conduz, P narra)
 Seguir o [roteiro de demonstração](roteiro-demonstracao-e-homologacao.md). Pontos e tempos:

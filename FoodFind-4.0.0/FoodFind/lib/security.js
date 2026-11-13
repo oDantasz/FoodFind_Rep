@@ -129,7 +129,9 @@ const limits = {
   redeem: new RateLimiter({ max: envInt('FOODFIND_REDEEM_MAX_FAILS', 10), windowMs: 15 * MIN, blockMs: 15 * MIN }),
   geocode: new RateLimiter({ max: envInt('FOODFIND_GEOCODE_MAX_PER_MIN', 30), windowMs: MIN, blockMs: MIN }),
   tiles: new RateLimiter({ max: envInt('FOODFIND_TILES_MAX_PER_MIN', 600), windowMs: MIN, blockMs: MIN }),
-  search: new RateLimiter({ max: envInt('FOODFIND_SEARCH_MAX_PER_MIN', 60), windowMs: MIN, blockMs: MIN })
+  search: new RateLimiter({ max: envInt('FOODFIND_SEARCH_MAX_PER_MIN', 60), windowMs: MIN, blockMs: MIN }),
+  // Contagem de visitas: no máximo 20 por hora por IP (o IP não é gravado, só usado aqui em memória).
+  visit: new RateLimiter({ max: envInt('FOODFIND_VISIT_MAX_PER_HOUR', 20), windowMs: 60 * MIN, blockMs: 60 * MIN })
 };
 
 function minutesText(seconds) {

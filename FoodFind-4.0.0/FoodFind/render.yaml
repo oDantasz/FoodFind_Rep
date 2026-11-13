@@ -3,9 +3,9 @@
 #
 # Limitações do plano gratuito do Render:
 # - O serviço "dorme" após 15 minutos sem acesso e leva cerca de 1 minuto para acordar.
-# - O disco é apagado ao reiniciar, dormir ou publicar uma nova versão.
-#   Por isso, a cada inicialização os dados de demonstração são recriados
-#   (npm run seed) antes de subir o servidor: o sistema sempre volta ao estado da demonstração.
+# - O disco é apagado ao reiniciar, dormir ou publicar uma nova versão. Com DATABASE_URL
+#   (PostgreSQL gratuito, ex.: Neon), o banco e as fotos ficam guardados lá e voltam a cada início.
+#   O seed só cria os dados de demonstração se eles ainda não existirem.
 services:
   - type: web
     name: foodfind
@@ -15,8 +15,8 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     # Cria os dados de demonstração (se ainda não existirem) e depois sobe o servidor.
-    # O ";" garante que o servidor sobe mesmo que o seed falhe.
-    dockerCommand: sh -c "node scripts/seed.js; exec node server.js"
+    # (start-render.sh: seed e depois o servidor; sem aspas, que o campo de comando do Render não interpreta)
+    dockerCommand: sh start-render.sh
     healthCheckPath: /api/health
     autoDeployTrigger: commit
     envVars:
@@ -30,4 +30,12 @@ services:
       # Senha de TODAS as contas de demonstração (inclusive a do administrador).
       # O Render pede este valor ao criar o serviço; não use a senha padrão do README.
       - key: SEED_PASSWORD
+        sync: false
+      # Endereço do PostgreSQL gratuito (ex.: Neon) onde ficam o banco e as fotos.
+      # Sem ele, os dados voltam ao estado da demonstração sempre que o serviço reinicia ou dorme.
+      - key: DATABASE_URL
+        sync: false
+      # Servidor Overpass (OpenStreetMap) com chave gratuita, ex.: https://api.overpass.ch/v1/SUA_CHAVE/interpreter.
+      # Os servidores públicos bloqueiam IPs de nuvem como o do Render.
+      - key: FOODFIND_OVERPASS_URL
         sync: false

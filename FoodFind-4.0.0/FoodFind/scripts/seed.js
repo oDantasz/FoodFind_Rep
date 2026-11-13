@@ -202,4 +202,7 @@ async function main() {
   }
 }
 
-main().catch(e => { console.error('Falha ao criar os dados de demonstração:', e.message); process.exit(1); });
+main()
+  // Com DATABASE_URL, espera a cópia chegar ao PostgreSQL antes de encerrar.
+  .then(() => db.closeRemote())
+  .catch(e => { console.error('Falha ao criar os dados de demonstração:', e.message); process.exit(1); });

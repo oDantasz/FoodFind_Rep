@@ -11,12 +11,18 @@ const known = new Map(); // lugares vistos recentemente: ref -> lugar
 
 // Servidores Overpass. O principal costuma ficar sobrecarregado e às vezes responde
 // 200 com "remark" de erro e nenhum resultado; nesse caso tentamos os espelhos públicos.
+// FOODFIND_OVERPASS_URL: um ou mais endereços separados por vírgula, tentados em ordem.
+// Em hospedagens de nuvem (Render), os servidores públicos costumam bloquear o IP; use um
+// serviço com chave gratuita, ex.: https://api.overpass.ch/v1/SUA_CHAVE/interpreter.
+// O log mostra só o nome do servidor, nunca o caminho (onde fica a chave).
 function overpassUrls() {
   if (process.env.FOODFIND_OVERPASS_URL) return process.env.FOODFIND_OVERPASS_URL.split(',').map(s => s.trim()).filter(Boolean);
+  // Instâncias públicas listadas na wiki do OpenStreetMap (nov/2026). O kumi.systems saiu da lista.
+  // O private.coffee vem primeiro porque não tem limite por IP; o overpass-api.de (FOSSGIS) é o
+  // principal, mas vive sobrecarregado e limita IPs compartilhados de hospedagens como o Render.
   return [
-    'https://overpass-api.de/api/interpreter',
-    'https://overpass.kumi.systems/api/interpreter',
-    'https://overpass.private.coffee/api/interpreter'
+    'https://overpass.private.coffee/api/interpreter',
+    'https://overpass-api.de/api/interpreter'
   ];
 }
 
@@ -133,7 +139,7 @@ async function overpassOnce(url, query, timeoutMs = 30000) {
   // Consulta enviada como texto puro no corpo, igual à Sprint 3 (formato aceito por todos os espelhos).
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'User-Agent': 'FoodFind/4.0 (projeto academico FATEC Ipiranga)' },
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'User-Agent': 'FoodFind/4.0 (projeto academico FATEC Ipiranga; +https://github.com/oDantasz/FoodFind_Rep)' },
     body: query,
     signal: AbortSignal.timeout(timeoutMs)
   });
@@ -162,9 +168,11 @@ async function overpass(query) {
 // (inclusive depois de reiniciar o servidor).
 let cacheFile = null;
 let persistTimer = null;
+let onCacheSave = null;
 
-function setCacheFile(file) {
+function setCacheFile(file, { onSave } = {}) {
   cacheFile = file;
+  onCacheSave = onSave || null;
   try {
     const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
     for (const [k, v] of Object.entries(saved)) if (v && Array.isArray(v.data)) { searchCache.set(k, v); v.data.forEach(remember); }
@@ -177,7 +185,12 @@ function persistCache() {
     persistTimer = null;
     const entries = [...searchCache.entries()].slice(-30);
     const tmp = `${cacheFile}.tmp`;
-    try { fs.writeFileSync(tmp, JSON.stringify(Object.fromEntries(entries))); fs.renameSync(tmp, cacheFile); } catch { /* cache é opcional */ }
+    try {
+      const json = JSON.stringify(Object.fromEntries(entries));
+      fs.writeFileSync(tmp, json);
+      fs.renameSync(tmp, cacheFile);
+      if (onCacheSave) onCacheSave(json);
+    } catch { /* cache é opcional */ }
   }, 500);
   persistTimer.unref();
 }
@@ -203,11 +216,14 @@ async function searchAround(lat, lng, radiusKm) {
   const key = `${lat.toFixed(3)},${lng.toFixed(3)},${radiusKm}`;
   const cached = searchCache.get(key);
   if (cached && Date.now() - cached.at < CACHE_MS) return { places: cached.data, stale: false };
-  const r = Math.round(radiusKm * 1000);
+  // Privacidade: o servidor do OpenStreetMap recebe o ponto arredondado (~110 m) e um raio
+  // 150 m maior; a distância exata é calculada aqui, com a posição real, e nada é guardado.
+  const r = Math.round(radiusKm * 1000) + 150;
+  const qLat = lat.toFixed(3), qLng = lng.toFixed(3);
   const query = `[out:json][timeout:30];
 (
-  nwr[amenity~"^(restaurant|fast_food|cafe|bar|pub|biergarten|ice_cream|food_court)$"](around:${r},${lat},${lng});
-  nwr[shop~"^(bakery|confectionery|pastry|ice_cream)$"](around:${r},${lat},${lng});
+  nwr[amenity~"^(restaurant|fast_food|cafe|bar|pub|biergarten|ice_cream|food_court)$"](around:${r},${qLat},${qLng});
+  nwr[shop~"^(bakery|confectionery|pastry|ice_cream)$"](around:${r},${qLat},${qLng});
 );
 out center tags;`;
   let list;

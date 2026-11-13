@@ -235,4 +235,15 @@ describe('Restaurantes, busca e reivindicação', () => {
     assert.equal((await client(srv.base).post('/api/auth/login', { email: u.email, password: r.json.temporaryPassword })).status, 200);
     assert.equal((await u.post('/api/admin/users/reset-password', { email: uniqueEmail() })).status, 401);
   });
+
+  test('Overpass com chave (FOODFIND_OVERPASS_URL): a chave no caminho nunca aparece no log', async () => {
+    const other = await startServer({ osm: false, env: { FOODFIND_OVERPASS_URL: 'http://127.0.0.1:9/chave-secreta-123/interpreter' } });
+    try {
+      const r = await client(other.base).get('/api/restaurants?lat=-23.5613&lng=-46.6565');
+      assert.equal(r.status, 200);
+      assert.match(r.json.warning, /OpenStreetMap/);
+      assert.match(other.logs(), /127\.0\.0\.1:9/);
+      assert.ok(!other.logs().includes('chave-secreta-123'));
+    } finally { await other.stop(); }
+  });
 });

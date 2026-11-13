@@ -352,12 +352,33 @@
   <!-- Administração -->
   <section id="view-admin" class="view hide" aria-labelledby="adminTitle">
     <a class="back" href="#/">← Voltar</a>
-    <div class="panel-head"><div><h1 id="adminTitle">Pedidos de reivindicação</h1>
-      <p class="mut">Restaurantes do OpenStreetMap que um dono pediu para assumir. Confirme com o estabelecimento antes de aprovar.</p></div>
-      <div class="form-group"><label for="adminFilter">Mostrar</label>
-        <select id="adminFilter"><option value="pendente">Pendentes</option><option value="aprovado">Aprovados</option><option value="recusado">Recusados</option><option value="">Todos</option></select></div>
-    </div>
-    <div id="adminList"></div>
+    <div class="panel-head"><div><h1 id="adminTitle">Administração</h1>
+      <p class="mut">Visão geral do FoodFind, contas cadastradas e pedidos de reivindicação. Dados pessoais: use só para administrar o sistema.</p></div></div>
+
+    <section class="admin-block" aria-labelledby="statsTitle">
+      <h2 id="statsTitle">Visão geral</h2>
+      <div id="adminStats"></div>
+    </section>
+
+    <section class="admin-block" aria-labelledby="usersTitle">
+      <h2 id="usersTitle">Usuários</h2>
+      <form class="admin-filters" data-form="admin-users" role="search">
+        <div class="form-group"><label for="adminUserQ">Buscar por nome ou e-mail</label><input id="adminUserQ" type="search" maxlength="100" placeholder="Ex.: carla ou @gmail.com"></div>
+        <div class="form-group"><label for="adminUserRole">Tipo de conta</label>
+          <select id="adminUserRole"><option value="">Todos</option><option value="cliente">Cliente</option><option value="restaurante">Restaurante</option></select></div>
+        <div class="form-group"><button type="submit" class="soft">Buscar</button></div>
+      </form>
+      <div id="adminUsers"></div>
+    </section>
+
+    <section class="admin-block" aria-labelledby="claimsTitle">
+      <div class="panel-head"><div><h2 id="claimsTitle">Pedidos de reivindicação</h2>
+        <p class="mut">Restaurantes do OpenStreetMap que um dono pediu para assumir. Confirme com o estabelecimento antes de aprovar.</p></div>
+        <div class="form-group"><label for="adminFilter">Mostrar</label>
+          <select id="adminFilter"><option value="pendente">Pendentes</option><option value="aprovado">Aprovados</option><option value="recusado">Recusados</option><option value="">Todos</option></select></div>
+      </div>
+      <div id="adminList"></div>
+    </section>
   </section>
 
   <!-- Política de privacidade -->
@@ -375,11 +396,14 @@
         <li><b>Avaliações:</b> nota, comentário e data. O nome aparece abreviado (ex.: "Pedro A.").</li>
         <li><b>Benefícios:</b> campanhas resgatadas, número do voucher e data de uso.</li>
         <li><b>Restaurantes (donos):</b> dados do estabelecimento, fotos e campanhas.</li>
+        <li><b>Último acesso:</b> data e hora do último uso com a conta conectada (atualizada no máximo a cada 30 minutos).</li>
+        <li><b>Visitas:</b> contamos quantas vezes o site foi aberto em cada dia, apenas o número total. Não guardamos IP, não usamos cookie para isso e não identificamos quem visitou.</li>
       </ul>
+      <p><b>Quem vê esses dados:</b> o administrador do FoodFind vê nome, e-mail, tipo de conta, data de cadastro, último acesso e a quantidade de restaurantes, avaliações e benefícios de cada conta, para administrar o sistema (por exemplo, redefinir senhas e aprovar restaurantes). Esses dados não são vendidos nem compartilhados.</p>
       <h2>3. Localização</h2>
       <p>A localização só é usada depois que você aceita o aviso e o navegador pede permissão. Ela serve apenas para buscar restaurantes próximos, é enviada ao servidor só no momento da busca e <b>não é armazenada</b>. Se preferir, pesquise por endereço ou bairro.</p>
       <h2>4. Serviços de terceiros</h2>
-      <p>Para mostrar o mapa e os restaurantes públicos, o FoodFind consulta o OpenStreetMap (Overpass e Nominatim) e servidores de mapa (OpenStreetMap e Esri). As bibliotecas de mapa e de leitura de QR Code são carregadas do unpkg.com com verificação de integridade (SRI).</p>
+      <p>Para mostrar o mapa e os restaurantes públicos, o FoodFind consulta o OpenStreetMap (Overpass e Nominatim) e servidores de mapa (OpenStreetMap e Esri). As bibliotecas de mapa e de leitura de QR Code são carregadas do unpkg.com com verificação de integridade (SRI). Quando publicado na internet, o FoodFind roda num serviço de hospedagem (por exemplo, Render) e pode guardar uma cópia do banco de dados e das fotos num banco PostgreSQL gerenciado (por exemplo, Neon), para que os dados não se percam quando o servidor reinicia.</p>
       <h2>5. Seus direitos</h2>
       <p>Em <a href="#/conta">Minha conta</a> você pode corrigir seu nome, trocar a senha, sair de todos os dispositivos, <b>exportar seus dados</b> em JSON e <b>excluir sua conta</b> com todos os dados vinculados.</p>
       <h2>6. Retenção e segurança</h2>

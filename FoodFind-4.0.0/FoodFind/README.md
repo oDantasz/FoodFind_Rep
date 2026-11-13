@@ -11,7 +11,7 @@ Grupo: **Pedro Augusto Dantas Aranda** e **Vinicius Tofani Siqueira**.
 1. [Funcionalidades](#funcionalidades)
 2. [Como rodar localmente](#como-rodar-localmente)
 3. [Como rodar com Docker](#como-rodar-com-docker)
-   - [Publicar grátis no Render](#publicar-grátis-no-render)
+   - [Publicar grátis no Render](#publicar-grátis-no-render-com-dados-salvos-no-neon)
 4. [Variáveis de ambiente](#variáveis-de-ambiente)
 5. [Contas de demonstração (seed)](#contas-de-demonstração-seed)
 6. [Testes automatizados e CI](#testes-automatizados-e-ci)
@@ -46,6 +46,8 @@ Grupo: **Pedro Augusto Dantas Aranda** e **Vinicius Tofani Siqueira**.
 - **Validar voucher** pelo número + código de conferência (cada voucher só pode ser usado uma vez).
 
 **Administrador** (conta definida por `ADMIN_EMAIL`)
+- **Visão geral**: contas (clientes e restaurantes), contas ativas nos últimos 7 dias, visitas por dia (só o total, sem IP), restaurantes, campanhas ativas, resgates e avaliações, com gráfico dos últimos 14 dias.
+- **Usuários**: nome, e-mail, tipo, data de cadastro, último acesso e atividade de cada conta, com busca e filtro por tipo.
 - Aprovar ou recusar pedidos de reivindicação.
 - Redefinir a senha de um usuário (gera senha temporária), já que não há serviço de e-mail.
 
@@ -115,22 +117,35 @@ docker compose start foodfind
 
 Por que volume nomeado e não `./data`? Com usuário não-root, uma pasta `./data` criada pelo Docker no Linux pertence ao root e o app não consegue gravar. Se preferir a pasta local, troque a linha do volume por `- ./data:/app/data` e rode antes `mkdir -p data && sudo chown -R 1000:1000 data` (no Docker Desktop para Windows/Mac não é preciso o `chown`).
 
-### Publicar grátis no Render
+### Publicar grátis no Render (com dados salvos no Neon)
 
-O arquivo [`render.yaml`](render.yaml) publica o FoodFind no plano gratuito do [Render](https://render.com), com endereço `https://` próprio (a câmera do celular funciona para ler o QR).
+O FoodFind roda no plano gratuito do [Render](https://render.com), com endereço `https://` próprio (a câmera do celular funciona para ler o QR). O disco do Render gratuito é apagado quando o serviço reinicia ou dorme; por isso o banco e as fotos ficam guardados num PostgreSQL gratuito do [Neon](https://neon.com) (variável `DATABASE_URL`).
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/oDantasz/FoodFind_Rep)
+**1. Banco no Neon (grátis)**
+1. Crie uma conta em neon.com e um projeto (região mais próxima, ex.: AWS São Paulo, se houver; senão US East).
+2. Em **Connect**, copie o endereço de conexão (`postgresql://usuario:senha@...neon.tech/neondb?sslmode=require...`). Ele é um segredo: não coloque no GitHub.
 
-1. Envie o código para a branch `main` do GitHub.
-2. Clique no botão acima (ou, no Render: **New → Blueprint** e escolha este repositório). Entre com a conta do GitHub; não é preciso cartão.
-3. O Render pede o valor de **`SEED_PASSWORD`**: é a senha de todas as contas de demonstração (inclusive `admin@foodfind.local`). Escolha uma senha forte; não use a senha padrão deste README.
-4. Aguarde o primeiro deploy (alguns minutos) e abra o endereço `https://foodfind-xxxx.onrender.com` mostrado no painel.
+**Rodar no seu computador usando o banco do Neon (opcional):** o projeto já está ligado ao Neon (`neon.ts` e `.neon`, criados por `neon init`). Com a [CLI do Neon](https://www.npmjs.com/package/neon) instalada (`npm i -g neon`):
+```bash
+neon login          # abre o navegador para entrar na conta do Neon
+neon deploy         # aplica o neon.ts e grava as variáveis em .env.local (nunca versionado)
+npm run seed:neon   # opcional: dados de demonstração no banco do Neon
+npm run start:neon  # sobe o FoodFind lendo DATABASE_URL do .env.local
+```
+O FoodFind usa só o PostgreSQL (`DATABASE_URL`). Os demais serviços declarados no `neon.ts` (auth, ai-gateway, functions, object-storage, realtime) não são usados pelo app; remova-os do arquivo antes do `neon deploy` se não quiser criá-los.
 
-Como funciona no plano gratuito:
-- O serviço **dorme após 15 minutos sem acesso** e leva cerca de **1 minuto** para acordar. Abra o link um pouco antes de apresentar.
-- O disco é **apagado** ao reiniciar, dormir ou publicar nova versão. Por isso o comando de início roda `node scripts/seed.js` antes do servidor: o sistema sempre volta aos dados de demonstração, e cadastros feitos no site não ficam salvos.
-- Cada envio para a `main` gera um novo deploy automaticamente.
-- O link do QR usa o próprio endereço do Render (`TRUST_PROXY=1`), então não é preciso definir `PUBLIC_URL`.
+**2. Serviço no Render**
+- Pelo arquivo [`render.yaml`](render.yaml) (projeto na raiz do repositório): **New → Blueprint**, escolha o repositório e preencha `SEED_PASSWORD` e `DATABASE_URL`.
+- Ou manualmente: **New → Web Service**, linguagem **Docker**, plano **Free**, *Health Check Path* `/api/health`, *Docker Command* `sh start-render.sh` e as variáveis `PORT=3000`, `TRUST_PROXY=1`, `ADMIN_EMAIL`, `SEED_PASSWORD` e `DATABASE_URL`. Se o projeto estiver numa subpasta do repositório, informe-a em **Root Directory**.
+
+**3. Restaurantes do OpenStreetMap no Render**
+Os servidores públicos do Overpass recusam conexões vindas do Render (log: `overpass-api.de: ECONNREFUSED`, `sem resposta em 25s`). Crie uma chave gratuita em [overpass.ch](https://overpass.ch) (ou na NextGIS) e defina `FOODFIND_OVERPASS_URL=https://api.overpass.ch/v1/SUA_CHAVE/interpreter` no Render. O ponto enviado ao Overpass é arredondado (~110 m); a distância exata é calculada no servidor.
+
+Como funciona:
+- Na inicialização, o FoodFind baixa do PostgreSQL a cópia do banco e as fotos; a cada alteração, envia a cópia de volta (e espera terminar ao receber SIGTERM). O `start-render.sh` roda o seed, que só cria os dados de demonstração se eles ainda não existirem.
+- Se o PostgreSQL não responder na inicialização, o servidor **não sobe** (evita começar com um banco vazio e apagar a cópia boa). Durante um novo deploy, o processo antigo para de gravar quando o novo assume o banco.
+- O serviço gratuito **dorme após 15 minutos sem acesso** e leva cerca de **1 minuto** para acordar. Abra o link um pouco antes de apresentar.
+- Sem `DATABASE_URL`, tudo funciona, mas os dados voltam ao estado da demonstração a cada reinício.
 
 ---
 
@@ -145,6 +160,8 @@ Como funciona no plano gratuito:
 | `FOODFIND_DATA_DIR` | `./data` | Pasta do banco `foodfind.db` e das fotos (`uploads/`). |
 | `FOODFIND_BACKUP_DIR` | `./backups` | Destino do `npm run backup`. |
 | `TRUST_PROXY` | `0` | `1` quando estiver atrás de proxy reverso confiável (usa `X-Forwarded-For`/`X-Forwarded-Host`). O cookie recebe `Secure` sempre que a requisição chega por HTTPS ou com `X-Forwarded-Proto: https`. |
+| `FOODFIND_OVERPASS_URL` | (servidores públicos) | Opcional. Servidor(es) Overpass do OpenStreetMap, separados por vírgula. **No Render é necessário**: os servidores públicos bloqueiam IPs de nuvem. Use um com chave gratuita, ex.: `https://api.overpass.ch/v1/SUA_CHAVE/interpreter` (Overpass.ch, 10 mil consultas/mês) ou `https://overpass.nextgis.com/SUA_CHAVE/api/interpreter` (NextGIS). A chave nunca aparece no log. |
+| `DATABASE_URL` | (vazio) | Opcional. PostgreSQL onde ficam uma cópia do banco e as fotos (ex.: Neon gratuito). Use em hospedagens que apagam o disco, como o Render gratuito. Se estiver definida e o banco não responder, o servidor não inicia (para não subir vazio). |
 | `HOST` | `0.0.0.0` | Interface de rede. |
 | `NODE_ENV` | — | `production` na imagem Docker. `development` (ou `npm run dev`) libera `/api/map-check`. |
 
@@ -179,7 +196,8 @@ npm test
 - Usa o `node:test` nativo. Cada arquivo de `test/` **sobe o servidor real** (`node server.js`) em uma porta livre, com **banco temporário**, e chama a API por HTTP.
 - O OpenStreetMap é substituído por um **simulador local** (Overpass + Nominatim) — nenhum teste depende da internet. Um teste também derruba o OSM e confirma que a busca responde só com os cadastrados.
 - Cobertura: cadastro e login, limite de tentativas, sessão (hash do token, rotação, logout), painel, busca e filtros, links maliciosos, reivindicação, avaliações (permissões, duplicidade, média, edição, exclusão, paginação, OSM), campanhas (validações, dono, estados, fuso de São Paulo, QR em SVG, **segredo nunca em rotas públicas**), resgate (todos os erros), voucher, histórico, exclusão em cascata, exclusão e exportação de conta, upload inválido, cabeçalhos de segurança, SRI, CSRF, arquivos estáticos, PWA, versões, migração de banco antigo, backup e seed.
-- **GitHub Actions** (`.github/workflows/ci.yml`): a cada *push* e *pull request* roda `npm ci` + `npm test` no Node 20 e, em seguida, constrói a imagem Docker e espera o healthcheck ficar `healthy`.
+- Persistência no PostgreSQL: a suíte `test/persistence.test.js` roda quando `FOODFIND_TEST_DATABASE_URL` aponta para um PostgreSQL de teste (sem ela, é pulada). Ela confere que banco e fotos voltam num servidor com disco vazio, que o seed grava lá, que um processo antigo não sobrescreve o novo e que o servidor não sobe se o banco estiver fora do ar.
+- **GitHub Actions** (`.github/workflows/ci.yml`): a cada *push* e *pull request* roda `npm ci` + `npm test` no Node 20 (com um PostgreSQL de serviço para a suíte de persistência) e, em seguida, constrói a imagem Docker e espera o healthcheck ficar `healthy`.
 
 ---
 
@@ -217,6 +235,7 @@ Respostas em JSON. Erros: `{ "message": "...", "code": "..." }`. Rotas que alter
 | GET | `/api/restaurants/:ref/campaigns` | Campanhas vigentes: título, benefício, validade e se há vagas (**sem o código**) |
 | GET | `/api/geocode?q=` | Endereço → coordenadas (só a partir do próprio site, com cache e limite por IP) |
 | GET | `/api/health` | `{ ok, version }` (usado pelo healthcheck) |
+| POST | `/api/visit` | Soma 1 nas visitas do dia (sem IP nem cookie; o site chama uma vez por aba) |
 
 ### Painel do restaurante (conta Restaurante)
 | Método | Rota | Descrição |
@@ -261,6 +280,8 @@ Erros do resgate:
 | GET | `/api/admin/claims?status=pendente\|aprovado\|recusado` | Pedidos de reivindicação |
 | POST | `/api/admin/claims/:id/approve` | Aprova (cria o restaurante para o solicitante) |
 | POST | `/api/admin/claims/:id/reject` | Recusa (`reason`) |
+| GET | `/api/admin/users?q=&role=&page=&limit=` | Contas: nome, e-mail, tipo, cadastro, último acesso e atividade (sem senha) |
+| GET | `/api/admin/stats` | Totais e série dos últimos 14 dias (visitas, cadastros, resgates) |
 | POST | `/api/admin/users/reset-password` | Gera senha temporária para `email` |
 | GET | `/api/map-check` | Diagnóstico dos servidores de mapa (admin ou modo dev) |
 
@@ -279,6 +300,7 @@ Outras rotas: `GET /tiles/:z/:x/:y` (mapa via servidor, só a partir do próprio
 │   ├── validate.js        ← str() e clean*() (URLs, telefones, horários, cardápio, fotos)
 │   ├── security.js        ← senhas (scrypt), sessões, cookies, limites, cabeçalhos, CSRF
 │   ├── osm.js             ← OpenStreetMap (Overpass): busca, categorias, opening_hours
+│   ├── remote.js          ← cópia do banco e das fotos no PostgreSQL (DATABASE_URL), opcional
 │   └── time.js            ← datas em America/Sao_Paulo
 ├── public/
 │   ├── index.html         ← todas as telas (SPA com rotas em hash)
@@ -313,7 +335,7 @@ A pasta `data/` (banco e fotos) é criada sozinha na primeira execução e **nã
 - **Voucher com código de conferência**: o número `FF-000123` é sequencial; para evitar que alguém invente um número e use o voucher de outra pessoa, o comprovante traz também um código de conferência de 4 caracteres, que o dono confere ao validar.
 - **Avaliações por lugar (`place_ref`)**: `ff-12` para restaurantes criados no FoodFind e `node-123` etc. para lugares do OSM. Quando um lugar do OSM é assumido, as avaliações antigas continuam valendo; se o dono excluir o perfil, as avaliações do lugar permanecem.
 - **Reivindicação aprovada por administrador**: evita que qualquer conta "tome" um restaurante real do mapa.
-- **Banco**: esquema versionado (`PRAGMA user_version = 4`), chaves estrangeiras com `ON DELETE CASCADE`, índices, transações e **gravação atômica** (arquivo temporário + `fsync` + `rename`). Bancos das versões 2.2/3 são migrados automaticamente na primeira execução (as sessões antigas, que guardavam o token em texto puro, são descartadas).
+- **Banco**: esquema versionado (`PRAGMA user_version = 5`), chaves estrangeiras com `ON DELETE CASCADE`, índices, transações e **gravação atômica** (arquivo temporário + `fsync` + `rename`). Bancos das versões 2.2/3 são migrados automaticamente na primeira execução (as sessões antigas, que guardavam o token em texto puro, são descartadas).
 - **Datas**: o formulário envia o horário local de São Paulo; o servidor converte para UTC e mostra tudo em `America/Sao_Paulo`.
 - **Docker com volume nomeado**: necessário para rodar como usuário não-root sem problemas de permissão.
 
@@ -330,7 +352,7 @@ A pasta `data/` (banco e fotos) é criada sozinha na primeira execução e **nã
 - `/api/geocode` e `/tiles` exigem origem do próprio site, têm limite por IP e cache; `/api/map-check` só para o administrador (ou modo dev).
 - Upload: confere os **magic bytes** (JPG/PNG/WEBP), limita a 5 MB, só aceita fotos do próprio dono e **apaga fotos órfãs** (removidas, de restaurantes excluídos ou nunca usadas em 24 h).
 - Logs sem senhas, tokens ou códigos; `uncaughtException`/`unhandledRejection` registrados sem derrubar o servidor.
-- LGPD: consentimento antes de usar a localização (que não é armazenada), aceite dos termos, exportação e exclusão de dados, nomes abreviados nas avaliações.
+- LGPD: consentimento antes de usar a localização (que não é armazenada), aceite dos termos, exportação e exclusão de dados, nomes abreviados nas avaliações. O administrador vê nome, e-mail, tipo, cadastro e último acesso das contas (informado na Política de Privacidade); visitas são contadas só pelo total do dia, sem IP.
 
 ### Recuperação de senha
 Recuperação **por e-mail** depende de um serviço de envio de e-mails (SMTP ou API como SendGrid/Amazon SES), que este projeto não tem. Alternativa implementada: o **administrador redefine a senha** em *Administração → Redefinir senha de um usuário*; o sistema gera uma senha temporária (mostrada uma única vez), encerra as sessões do usuário, e ele troca a senha em *Minha conta*. Para produção, recomenda-se integrar um serviço de e-mail com link de uso único e expiração curta.
@@ -378,7 +400,7 @@ docker run -d --name foodfind -p 3000:3000 -v foodfind-data:/app/data \
 - Mapa, restaurantes públicos e busca por endereço dependem do OpenStreetMap (internet). Sem ele, a busca mostra só os restaurantes cadastrados e avisa o usuário.
 - Leitura por câmera depende do navegador, da permissão e de HTTPS (ou `localhost`).
 - Não há envio de e-mail (veja *Recuperação de senha*).
-- O SQLite em WebAssembly grava o banco inteiro a cada alteração: adequado para o porte do projeto acadêmico, não para milhares de usuários simultâneos.
+- O SQLite em WebAssembly grava o banco inteiro a cada alteração (e, com `DATABASE_URL`, envia a cópia inteira ao PostgreSQL): adequado para o porte do projeto acadêmico, não para milhares de usuários simultâneos nem para mais de uma instância do servidor ao mesmo tempo.
 
 ---
 
