@@ -1,0 +1,37 @@
+# Publicação gratuita no Render (https://render.com) a partir deste repositório.
+# Como usar: README → "Publicar grátis no Render".
+#
+# Limitações do plano gratuito do Render:
+# - O serviço "dorme" após 15 minutos sem acesso e leva cerca de 1 minuto para acordar.
+# - O disco é apagado ao reiniciar, dormir ou publicar uma nova versão. Com DATABASE_URL
+#   (PostgreSQL gratuito, ex.: Neon), o banco e as fotos ficam guardados lá e voltam a cada início.
+#   O seed só cria os dados de demonstração se eles ainda não existirem.
+services:
+  - type: web
+    name: foodfind
+    runtime: docker
+    plan: free
+    region: virginia
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # Cria os dados de demonstração (se ainda não existirem) e depois sobe o servidor.
+    # (start-render.sh: seed e depois o servidor; sem aspas, que o campo de comando do Render não interpreta)
+    dockerCommand: sh start-render.sh
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: PORT
+        value: "3000"
+      # O Render entrega as requisições por um proxy HTTPS; o FoodFind passa a confiar nos cabeçalhos X-Forwarded-*.
+      - key: TRUST_PROXY
+        value: "1"
+      - key: ADMIN_EMAIL
+        value: admin@foodfind.local
+      # Senha de TODAS as contas de demonstração (inclusive a do administrador).
+      # O Render pede este valor ao criar o serviço; não use a senha padrão do README.
+      - key: SEED_PASSWORD
+        sync: false
+      # Endereço do PostgreSQL gratuito (ex.: Neon) onde ficam o banco e as fotos.
+      # Sem ele, os dados voltam ao estado da demonstração sempre que o serviço reinicia ou dorme.
+      - key: DATABASE_URL
+        sync: false

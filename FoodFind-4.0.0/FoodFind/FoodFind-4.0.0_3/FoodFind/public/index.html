@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="FoodFind: encontre restaurantes perto de você, veja cardápio, fotos e avaliações e resgate descontos por QR Code.">
+  <meta name="theme-color" content="#c8102e">
+  <title>FoodFind</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" integrity="sha384-pmjIAcz2bAn0xukfxADbZIb3t8oRT9Sv0rvO+BR5Csr6Dhqq+nZs59P0pPKQJkEV" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" integrity="sha384-wgw+aLYNQ7dlhK47ZPK7FRACiq7ROZwgFNg0m04avm4CaXS+Z9Y7nMu8yNjBKYC+" crossorigin="anonymous">
+  <link rel="stylesheet" href="styles.css?v=4.0.0">
+</head>
+<body>
+<svg class="sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-locate" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></symbol>
+  <symbol id="i-qr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM21 14v.01M14 21h.01M17 21h4v-4"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path fill="currentColor" stroke="none" d="m12 2.5 2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5-4.8-4.6 6.6-.9z"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+  <symbol id="i-route" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 21 3l-8 18-2-8z"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1.1-4.6A8 8 0 1 1 21 12z"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.5 6.5h.01"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></symbol>
+  <symbol id="i-bag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1 13H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></symbol>
+  <symbol id="i-store" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v10h16V10"/><path d="M3 4h18l-1 6H4z"/><path d="M10 20v-5h4v5"/></symbol>
+  <symbol id="i-ticket" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18v4a2 2 0 0 0 0 4v4H3v-4a2 2 0 0 0 0-4z"/><path d="M15 6v2M15 11v2M15 16v2"/></symbol>
+  <symbol id="i-gift" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v9h14v-9M12 8v13M12 8c-1.5-3-5-4.5-5-2s3 2 5 2zm0 0c1.5-3 5-4.5 5-2s-3 2-5 2z"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 6.5 8.5 6.5 8.5-6.5"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l16 16"/><path d="M9.9 5.2A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.1 3.9M6.6 6.6C3.6 8.4 2 12 2 12s3.6 7 10 7a9.8 9.8 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5V3h4M16 17l5-5-5-5M21 12H9"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.7-4.4L4 8M4 4v4h4M4 13a8 8 0 0 0 14.7 4.4L20 16M20 20v-4h-4"/></symbol>
+  <symbol id="i-printer" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 9V3h10v6M7 18H4v-7h16v7h-3"/><path d="M7 14h10v7H7z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></symbol>
+  <symbol id="i-map" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="i-utensils" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a2 2 0 0 0 2 2h0a2 2 0 0 0 2-2V3M8 3v18M17 21V3c-2.5 1.5-3.5 4.5-3.5 8H17"/></symbol>
+  <symbol id="i-coffee" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M17 11h1.5a2.5 2.5 0 0 1 0 5H17M8 3v3M12 3v3"/></symbol>
+  <symbol id="i-pizza" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21 3.5 6.5C8.5 3.5 15.5 3.5 20.5 6.5z"/><circle cx="10" cy="10" r="1.2" fill="currentColor"/><circle cx="14" cy="11.5" r="1.2" fill="currentColor"/><circle cx="12" cy="15" r="1.2" fill="currentColor"/></symbol>
+  <symbol id="i-burger" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a8 6 0 0 1 16 0z"/><path d="M3 14.5h18M4 17h16v1a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-beer" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h10v13H6z"/><path d="M16 11h2a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-2M6 8a3 3 0 0 1 5-2.5A3 3 0 0 1 16 8M9.5 11v7M12.5 11v7"/></symbol>
+  <symbol id="i-bread" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 11a4 4 0 0 1 1-7.5h10A4 4 0 0 1 18 11v9H6z"/><path d="M10 7.5v3M14 7.5v3"/></symbol>
+  <symbol id="i-icecream" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11a5 5 0 0 1 10 0z"/><path d="m7 11 5 10 5-10"/></symbol>
+  <symbol id="i-cake" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21h16v-8H4z"/><path d="M4 16.5c2 1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 4 0M12 13V9M8 13v-3M16 13v-3M12 5.5v.01"/></symbol>
+</svg>
+<a class="skip-link" href="#main" data-action="skip">Pular para o conteúdo</a>
+<canvas id="pageFx" class="page-fx" aria-hidden="true"></canvas>
+<header>
+  <a class="brand" href="#/" aria-label="FoodFind, página inicial"><img src="icons/icon.svg" alt="" width="34" height="34"><span>Food<em>Find</em></span></a>
+  <div class="header-actions">
+    <button type="button" class="account-btn qr-btn" data-action="scan" aria-label="Ler QR Code de campanha"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-qr"></use></svg><span class="qr-label">Ler QR Code</span></button>
+    <nav id="accountArea" aria-label="Conta"></nav>
+  </div>
+</header>
+
+<main id="main" tabindex="-1">
+  <div id="status" class="status" role="status" aria-live="polite"></div>
+
+  <!-- Início: mapa, busca e lista -->
+  <section id="view-home" class="view" aria-labelledby="homeTitle">
+    <div class="hero-stage">
+      <canvas id="heroFx" class="hero-fx" aria-hidden="true"></canvas>
+      <div class="hero-inner">
+        <div class="hero">
+          <h1 id="homeTitle">O que tem pra comer <em>por perto?</em></h1>
+          <p>Restaurantes, padarias e botecos no mapa, com cardápio, avaliações de quem já foi e descontos para resgatar no balcão.</p>
+        </div>
+        <form class="search" id="searchForm" role="search" data-form="search">
+          <label class="sr-only" for="q">Buscar por nome, prato ou culinária</label>
+          <input id="q" name="q" placeholder="Ex.: pizza, sushi, hambúrguer" autocomplete="off">
+          <button type="submit"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg> Buscar</button>
+          <button type="button" class="secondary" data-action="locate"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-pin"></use></svg> Minha localização</button>
+        </form>
+
+        <form class="address-search" id="addressForm" data-form="address">
+          <label for="addr">Ou pesquise por endereço ou bairro</label>
+          <div class="inline">
+            <input id="addr" name="addr" placeholder="Ex.: Rua Augusta, 500 ou Vila Mariana" autocomplete="street-address">
+            <button type="submit" class="soft">Buscar endereço</button>
+          </div>
+          <div id="addrResults" class="geo-results hide" aria-live="polite"></div>
+        </form>
+        <div class="cat-chips" role="group" aria-labelledby="chipsLabel">
+          <span id="chipsLabel" class="sr-only">Categorias (escolha uma ou mais)</span>
+          <button type="button" class="chip chip-all" data-action="cat-all" aria-pressed="true">Tudo</button>
+          <span id="catChips" class="chip-set"></span>
+        </div>
+      </div>
+    </div>
+
+    <div id="geoBanner" class="geo-banner hide" role="region" aria-label="Uso da localização">
+      <svg class="i" aria-hidden="true" focusable="false"><use href="#i-pin"></use></svg>
+      <p>Para mostrar restaurantes perto de você, o FoodFind pode usar a localização do seu navegador. Ela é usada só para a busca e não fica salva. <a href="#/privacidade">Saiba mais</a>.</p>
+      <div class="geo-actions">
+        <button type="button" class="primary small" data-action="geo-allow">Usar minha localização</button>
+        <button type="button" class="soft small" data-action="geo-deny">Prefiro digitar um endereço</button>
+      </div>
+    </div>
+
+    <details class="filters" id="filtersBox" open>
+      <summary>Filtros e ordenação</summary>
+      <form id="filtersForm" class="filters-grid" data-form="filters">
+        <input type="hidden" id="fCategory" name="category" value="">
+        <div class="form-group"><label for="fPrice">Faixa de preço</label>
+          <select id="fPrice" name="price"><option value="">Qualquer</option><option value="$">$ · Econômico</option><option value="$$">$$ · Moderado</option><option value="$$$">$$$ · Caro</option><option value="$$$$">$$$$ · Sofisticado</option></select></div>
+        <div class="form-group"><label for="fRating">Nota mínima</label>
+          <select id="fRating" name="minRating"><option value="">Qualquer</option><option value="3">3 ou mais</option><option value="4">4 ou mais</option><option value="4.5">4,5 ou mais</option></select></div>
+        <div class="form-group"><label for="fRadius">Distância</label>
+          <select id="fRadius" name="radius"><option value="1">Até 1 km</option><option value="2">Até 2 km</option><option value="4" selected>Até 4 km</option><option value="6">Até 6 km</option><option value="10">Até 10 km</option></select></div>
+        <div class="form-group"><label for="fSort">Ordenar por</label>
+          <select id="fSort" name="sort"><option value="distance">Mais perto</option><option value="rating">Melhor avaliados</option><option value="name">Nome (A-Z)</option></select></div>
+        <div class="form-group check"><label><input type="checkbox" id="fOpen" name="open" value="1"> Aberto agora</label></div>
+        <div class="form-group"><button type="button" class="soft small" data-action="clear-filters">Limpar filtros</button></div>
+      </form>
+    </details>
+
+    <section id="deals" class="deals hide" aria-labelledby="dealsTitle">
+      <h2 id="dealsTitle">Descontos por perto</h2>
+      <p class="mut">Resgate lendo o QR Code no balcão do restaurante.</p>
+      <ul id="dealsList" class="deals-list"></ul>
+    </section>
+
+    <div class="view-toggle" role="group" aria-label="Como ver os resultados">
+      <span class="view-toggle-light" aria-hidden="true"></span>
+      <button type="button" data-action="view-mode" data-mode="list" aria-pressed="true"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-list"></use></svg> Lista</button>
+      <button type="button" data-action="view-mode" data-mode="map" aria-pressed="false"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-map"></use></svg> Mapa</button>
+    </div>
+
+    <div class="grid" id="homeGrid" data-mode="list">
+      <div class="map-col">
+        <div class="map-wrap">
+          <div id="map" role="region" aria-label="Mapa de restaurantes"></div>
+          <button type="button" id="searchAreaBtn" class="search-area hide" data-action="search-area"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-refresh"></use></svg> Buscar nesta área</button>
+        </div>
+        <p class="note">Os restaurantes vêm do OpenStreetMap e dos cadastros feitos no FoodFind. A localização usa a permissão do seu navegador.</p>
+      </div>
+      <aside aria-labelledby="listTitle">
+        <h2 id="listTitle">Restaurantes <small id="count"></small></h2>
+        <div id="list" aria-live="polite"><div class="loading" role="status">Buscando restaurantes próximos...</div></div>
+      </aside>
+    </div>
+  </section>
+
+  <section id="view-detail" class="view hide" aria-live="polite"></section>
+
+  <!-- Painel do restaurante -->
+  <section id="view-panel" class="view hide" aria-labelledby="panelTitle">
+    <a class="back" href="#/">← Voltar</a>
+    <div class="panel-head">
+      <div>
+        <h1 id="panelTitle">Meus restaurantes</h1>
+        <p class="mut">Cadastre seu restaurante ou atualize as informações. As alterações aparecem na busca na hora.</p>
+      </div>
+      <div class="panel-actions">
+        <a class="soft" href="#/campanhas"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-ticket"></use></svg> Campanhas e vouchers</a>
+        <button type="button" class="primary" data-action="new-restaurant">+ Cadastrar restaurante</button>
+      </div>
+    </div>
+    <div id="myList" class="my-list"></div>
+    <div id="myClaims"></div>
+
+    <form id="rForm" class="r-form hide" data-form="restaurant" novalidate aria-labelledby="rFormTitle">
+      <div class="form-title">
+        <h2 id="rFormTitle" tabindex="-1">Novo restaurante</h2>
+        <span id="rLinked" class="linked-badge hide"></span>
+      </div>
+      <div id="rError" class="modal-error hide" role="alert"></div>
+      <div id="claimInfo" class="claim-info hide">
+        <p><b>Pedido de reivindicação.</b> Confira os dados abaixo. O pedido será analisado pelo administrador do FoodFind; enquanto estiver pendente, o restaurante não pode ser editado. Depois de aprovado, ele aparece no seu painel.</p>
+        <div class="form-group"><label for="rMessage">Mensagem para o administrador (como comprovar que você é o responsável)</label>
+          <textarea id="rMessage" rows="2" maxlength="500" placeholder="Ex.: sou o proprietário; CNPJ 00.000.000/0001-00; telefone do estabelecimento (11) 3333-4444"></textarea></div>
+      </div>
+
+      <fieldset>
+        <legend>1. Informações básicas</legend>
+        <div class="fgrid">
+          <div class="form-group span2"><label for="rName">Nome do restaurante *</label><input id="rName" maxlength="120" required placeholder="Ex.: Cantina da Nonna"></div>
+          <div class="form-group"><label for="rCategory">Categoria</label>
+            <select id="rCategory">
+              <option>Restaurante</option><option>Pizzaria</option><option>Lanchonete</option><option>Fast-food</option><option>Café</option>
+              <option>Bar</option><option>Padaria</option><option>Sorveteria</option><option>Doceria</option><option>Outro</option>
+            </select>
+          </div>
+          <div class="form-group"><label for="rPrice">Faixa de preço</label>
+            <select id="rPrice"><option value="">Não informar</option><option value="$">$ · Econômico</option><option value="$$">$$ · Moderado</option><option value="$$$">$$$ · Caro</option><option value="$$$$">$$$$ · Sofisticado</option></select>
+          </div>
+          <div class="form-group span2"><label for="rCuisine">Tipo de culinária</label><input id="rCuisine" maxlength="120" placeholder="Ex.: italiana, massas, pizza"></div>
+          <div class="form-group span2"><label for="rDescription">Descrição</label><textarea id="rDescription" rows="3" maxlength="1500" placeholder="Conte um pouco sobre o restaurante, ambiente, especialidades..."></textarea></div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>2. Site e contatos</legend>
+        <div class="fgrid">
+          <div class="form-group span2"><label for="rWebsite">URL do site (redirecionamento)</label><input id="rWebsite" type="url" inputmode="url" placeholder="https://www.meurestaurante.com.br" aria-describedby="rWebsiteHint"><span class="hint" id="rWebsiteHint">O botão "Visitar site" no perfil leva o cliente para este endereço.</span></div>
+          <div class="form-group"><label for="rPhone">Telefone</label><input id="rPhone" type="tel" placeholder="(11) 3333-4444"></div>
+          <div class="form-group"><label for="rWhatsapp">WhatsApp</label><input id="rWhatsapp" type="tel" placeholder="(11) 99999-8888"></div>
+          <div class="form-group"><label for="rInstagram">Instagram</label><input id="rInstagram" placeholder="@meurestaurante"></div>
+          <div class="form-group"><label for="rDelivery">Link de delivery</label><input id="rDelivery" type="url" inputmode="url" placeholder="Link do iFood, Rappi, etc."></div>
+          <div class="form-group span2"><label for="rMenuUrl">Link do cardápio completo (opcional)</label><input id="rMenuUrl" type="url" inputmode="url" placeholder="Link para PDF ou página do cardápio"></div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>3. Localização</legend>
+        <div class="form-group"><label for="rAddress">Endereço</label>
+          <div class="inline">
+            <input id="rAddress" maxlength="300" placeholder="Rua, número, bairro, cidade">
+            <button type="button" class="soft" data-action="geocode-form">Localizar no mapa</button>
+            <button type="button" class="soft" data-action="locate-form"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-pin"></use></svg> Minha localização</button>
+          </div>
+        </div>
+        <div id="geoResults" class="geo-results hide" aria-live="polite"></div>
+        <div id="rMap" role="region" aria-label="Mapa para marcar a localização do restaurante"></div>
+        <p class="hint" id="rCoords" aria-live="polite">Clique no mapa para marcar onde fica o restaurante. Depois é só arrastar o marcador para ajustar.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>4. Fotos</legend>
+        <div id="photoGrid" class="photo-grid"></div>
+        <label class="upload-btn"><input type="file" id="photoInput" accept="image/jpeg,image/png,image/webp" multiple><svg class="i" aria-hidden="true" focusable="false"><use href="#i-qr"></use></svg> Adicionar fotos</label>
+        <span class="hint">A primeira foto é a capa. Até 12 fotos JPG, PNG ou WEBP de até 5 MB.</span>
+      </fieldset>
+
+      <fieldset>
+        <legend>5. Horário de funcionamento</legend>
+        <div id="hoursRows" class="hours-rows"></div>
+        <button type="button" class="soft small" data-action="copy-hours">Copiar horário de segunda para todos os dias</button>
+      </fieldset>
+
+      <fieldset>
+        <legend>6. Cardápio</legend>
+        <div id="menuRows" class="menu-rows"></div>
+        <datalist id="sectionList"></datalist>
+        <button type="button" class="soft small" data-action="add-menu-item">+ Adicionar item</button>
+      </fieldset>
+
+      <div class="form-actions">
+        <button type="button" class="soft" data-action="cancel-edit">Cancelar</button>
+        <button type="submit" class="primary" id="rSave">Salvar restaurante</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- Gestão de campanhas -->
+  <section id="view-campaigns" class="view hide" aria-labelledby="campTitle">
+    <a class="back" href="#/painel">← Painel</a>
+    <div class="panel-head">
+      <div>
+        <h1 id="campTitle">Campanhas e vouchers</h1>
+        <p class="mut">Crie descontos, imprima o QR Code para o balcão e valide os vouchers dos clientes. Datas e horas no horário de Brasília (São Paulo).</p>
+      </div>
+      <button type="button" class="primary" data-action="new-campaign">+ Nova campanha</button>
+    </div>
+
+    <form id="voucherForm" class="card-box" data-form="voucher-lookup" aria-labelledby="voucherTitle">
+      <h2 id="voucherTitle">Validar voucher do cliente</h2>
+      <p class="mut">Digite o número mostrado no comprovante do cliente (ex.: FF-000123) e o código de conferência.</p>
+      <div class="inline">
+        <div class="form-group"><label for="vNumber">Número do voucher</label><input id="vNumber" required placeholder="FF-000123" autocomplete="off"></div>
+        <div class="form-group"><label for="vCheck">Código de conferência</label><input id="vCheck" placeholder="Ex.: K7Q2" maxlength="8" autocomplete="off"></div>
+        <button type="submit" class="soft">Consultar</button>
+      </div>
+      <div id="voucherResult" aria-live="polite"></div>
+    </form>
+
+    <form id="cForm" class="r-form hide" data-form="campaign" novalidate aria-labelledby="cFormTitle">
+      <div class="form-title"><h2 id="cFormTitle" tabindex="-1">Nova campanha</h2></div>
+      <div id="cError" class="modal-error hide" role="alert"></div>
+      <div class="fgrid">
+        <div class="form-group span2"><label for="cRestaurant">Restaurante *</label><select id="cRestaurant" required></select></div>
+        <div class="form-group span2"><label for="cTitle">Título *</label><input id="cTitle" maxlength="120" required placeholder="Ex.: 15% de desconto no almoço"></div>
+        <div class="form-group span2"><label for="cDescription">Descrição do benefício *</label><textarea id="cDescription" rows="2" maxlength="500" required placeholder="Ex.: Válido para pratos executivos, de segunda a sexta, no consumo no local."></textarea></div>
+        <div class="form-group"><label for="cType">Tipo de desconto *</label><select id="cType"><option value="percent">Percentual (%)</option><option value="fixed">Valor fixo (R$)</option></select></div>
+        <div class="form-group"><label for="cValue">Valor do desconto *</label><input id="cValue" type="number" min="0.01" step="0.01" required placeholder="Ex.: 15"></div>
+        <div class="form-group"><label for="cStart">Início *</label><input id="cStart" type="datetime-local" required></div>
+        <div class="form-group"><label for="cEnd">Fim *</label><input id="cEnd" type="datetime-local" required></div>
+        <div class="form-group span2"><label for="cLimit">Limite de usos (opcional)</label><input id="cLimit" type="number" min="1" step="1" placeholder="Em branco = sem limite" aria-describedby="cLimitHint"><span class="hint" id="cLimitHint">Cada cliente pode resgatar uma vez. O limite é o total de resgates da campanha.</span></div>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="soft" data-action="cancel-campaign">Cancelar</button>
+        <button type="submit" class="primary" id="cSave">Salvar campanha</button>
+      </div>
+    </form>
+
+    <div id="campaignAdminList" class="campaign-admin-list"></div>
+  </section>
+
+  <!-- Meus benefícios (cliente) -->
+  <section id="view-benefits" class="view hide" aria-labelledby="benefitsTitle">
+    <a class="back" href="#/">← Voltar</a>
+    <div class="panel-head">
+      <div>
+        <h1 id="benefitsTitle">Meus benefícios</h1>
+        <p class="mut">Vouchers que você resgatou. Mostre o comprovante no caixa do restaurante.</p>
+      </div>
+      <button type="button" class="primary" data-action="scan"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-qr"></use></svg><span class="qr-label">Ler QR Code</span></button>
+    </div>
+    <div id="benefitsList"></div>
+  </section>
+
+  <!-- Minha conta -->
+  <section id="view-account" class="view hide" aria-labelledby="accountTitle">
+    <a class="back" href="#/">← Voltar</a>
+    <div class="panel-head"><div><h1 id="accountTitle">Minha conta</h1><p class="mut" id="accountInfo"></p></div></div>
+    <div class="account-grid">
+      <form class="card-box" data-form="profile" aria-labelledby="profileTitle">
+        <h2 id="profileTitle">Dados pessoais</h2>
+        <div class="form-group"><label for="pName">Nome</label><input id="pName" maxlength="100" required autocomplete="name"></div>
+        <div class="form-group"><label for="pEmail">E-mail</label><input id="pEmail" readonly aria-describedby="pEmailHint"><span class="hint" id="pEmailHint">O e-mail identifica a conta e não pode ser alterado.</span></div>
+        <button type="submit" class="primary">Salvar nome</button>
+        <p class="form-msg" aria-live="polite"></p>
+      </form>
+      <form class="card-box" data-form="password" aria-labelledby="pwdTitle">
+        <h2 id="pwdTitle">Trocar senha</h2>
+        <div class="form-group"><label for="pwdCurrent">Senha atual</label><input id="pwdCurrent" type="password" required autocomplete="current-password"></div>
+        <div class="form-group"><label for="pwdNew">Nova senha (mínimo de 8 caracteres)</label><input id="pwdNew" type="password" minlength="8" required autocomplete="new-password"></div>
+        <button type="submit" class="primary">Trocar senha</button>
+        <p class="form-msg" aria-live="polite"></p>
+      </form>
+      <div class="card-box">
+        <h2>Segurança</h2>
+        <p class="mut">Encerra o acesso em todos os navegadores e celulares onde você entrou, inclusive este.</p>
+        <button type="button" class="soft" data-action="logout-all">Sair de todos os dispositivos</button>
+      </div>
+      <div class="card-box">
+        <h2>Seus dados (LGPD)</h2>
+        <p class="mut">Baixe uma cópia de todos os dados que o FoodFind guarda sobre você, em formato JSON.</p>
+        <a class="soft" href="/api/me/export" download>Exportar meus dados</a>
+        <hr>
+        <p class="mut">Excluir a conta apaga permanentemente suas sessões, avaliações, benefícios e, para donos, restaurantes, fotos e campanhas.</p>
+        <button type="button" class="danger" data-action="delete-account">Excluir minha conta</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Administração -->
+  <section id="view-admin" class="view hide" aria-labelledby="adminTitle">
+    <a class="back" href="#/">← Voltar</a>
+    <div class="panel-head"><div><h1 id="adminTitle">Administração</h1>
+      <p class="mut">Visão geral do FoodFind, contas cadastradas e pedidos de reivindicação. Dados pessoais: use só para administrar o sistema.</p></div></div>
+
+    <section class="admin-block" aria-labelledby="statsTitle">
+      <h2 id="statsTitle">Visão geral</h2>
+      <div id="adminStats"></div>
+    </section>
+
+    <section class="admin-block" aria-labelledby="usersTitle">
+      <h2 id="usersTitle">Usuários</h2>
+      <form class="admin-filters" data-form="admin-users" role="search">
+        <div class="form-group"><label for="adminUserQ">Buscar por nome ou e-mail</label><input id="adminUserQ" type="search" maxlength="100" placeholder="Ex.: carla ou @gmail.com"></div>
+        <div class="form-group"><label for="adminUserRole">Tipo de conta</label>
+          <select id="adminUserRole"><option value="">Todos</option><option value="cliente">Cliente</option><option value="restaurante">Restaurante</option></select></div>
+        <div class="form-group"><button type="submit" class="soft">Buscar</button></div>
+      </form>
+      <div id="adminUsers"></div>
+    </section>
+
+    <section class="admin-block" aria-labelledby="claimsTitle">
+      <div class="panel-head"><div><h2 id="claimsTitle">Pedidos de reivindicação</h2>
+        <p class="mut">Restaurantes do OpenStreetMap que um dono pediu para assumir. Confirme com o estabelecimento antes de aprovar.</p></div>
+        <div class="form-group"><label for="adminFilter">Mostrar</label>
+          <select id="adminFilter"><option value="pendente">Pendentes</option><option value="aprovado">Aprovados</option><option value="recusado">Recusados</option><option value="">Todos</option></select></div>
+      </div>
+      <div id="adminList"></div>
+    </section>
+  </section>
+
+  <!-- Política de privacidade -->
+  <section id="view-privacy" class="view hide legal" aria-labelledby="privacyTitle">
+    <a class="back" href="#/">← Voltar</a>
+    <article class="card-box">
+      <h1 id="privacyTitle">Política de Privacidade</h1>
+      <p class="mut">Versão 4.0 · Projeto acadêmico da FATEC Ipiranga (ADS) · Lei nº 13.709/2018 (LGPD)</p>
+      <h2>1. Quem somos</h2>
+      <p>O FoodFind é um projeto acadêmico desenvolvido por Pedro Augusto Dantas Aranda e Vinicius Tofani Siqueira para a disciplina de Laboratório de Engenharia de Software. O controlador dos dados é a equipe responsável pela instalação do sistema.</p>
+      <h2>2. Dados que coletamos</h2>
+      <ul>
+        <li><b>Conta:</b> nome, e-mail, tipo de conta e senha (guardada apenas como hash scrypt; ninguém consegue lê-la).</li>
+        <li><b>Sessão:</b> um cookie <code>ff_session</code> estritamente necessário para manter você conectado. O banco guarda só o hash desse token.</li>
+        <li><b>Avaliações:</b> nota, comentário e data. O nome aparece abreviado (ex.: "Pedro A.").</li>
+        <li><b>Benefícios:</b> campanhas resgatadas, número do voucher e data de uso.</li>
+        <li><b>Restaurantes (donos):</b> dados do estabelecimento, fotos e campanhas.</li>
+        <li><b>Último acesso:</b> data e hora do último uso com a conta conectada (atualizada no máximo a cada 30 minutos).</li>
+        <li><b>Visitas:</b> contamos quantas vezes o site foi aberto em cada dia, apenas o número total. Não guardamos IP, não usamos cookie para isso e não identificamos quem visitou.</li>
+      </ul>
+      <p><b>Quem vê esses dados:</b> o administrador do FoodFind vê nome, e-mail, tipo de conta, data de cadastro, último acesso e a quantidade de restaurantes, avaliações e benefícios de cada conta, para administrar o sistema (por exemplo, redefinir senhas e aprovar restaurantes). Esses dados não são vendidos nem compartilhados.</p>
+      <h2>3. Localização</h2>
+      <p>A localização só é usada depois que você aceita o aviso e o navegador pede permissão. Ela serve apenas para buscar restaurantes próximos, é enviada ao servidor só no momento da busca e <b>não é armazenada</b>. Se preferir, pesquise por endereço ou bairro.</p>
+      <h2>4. Serviços de terceiros</h2>
+      <p>Para mostrar o mapa e os restaurantes públicos, o FoodFind consulta o OpenStreetMap (Overpass e Nominatim) e servidores de mapa (OpenStreetMap e Esri). As bibliotecas de mapa e de leitura de QR Code são carregadas do unpkg.com com verificação de integridade (SRI). Quando publicado na internet, o FoodFind roda num serviço de hospedagem (por exemplo, Render) e pode guardar uma cópia do banco de dados e das fotos num banco PostgreSQL gerenciado (por exemplo, Neon), para que os dados não se percam quando o servidor reinicia.</p>
+      <h2>5. Seus direitos</h2>
+      <p>Em <a href="#/conta">Minha conta</a> você pode corrigir seu nome, trocar a senha, sair de todos os dispositivos, <b>exportar seus dados</b> em JSON e <b>excluir sua conta</b> com todos os dados vinculados.</p>
+      <h2>6. Retenção e segurança</h2>
+      <p>Os dados ficam enquanto a conta existir. Sessões expiram em 30 dias e são removidas automaticamente. Usamos HTTPS quando disponível, cookies HttpOnly/SameSite, limite de tentativas de login e cabeçalhos de segurança.</p>
+      <h2>7. Contato</h2>
+      <p>Dúvidas sobre privacidade: fale com a equipe do projeto pelo repositório do FoodFind.</p>
+    </article>
+  </section>
+
+  <!-- Termos de uso -->
+  <section id="view-terms" class="view hide legal" aria-labelledby="termsTitle">
+    <a class="back" href="#/">← Voltar</a>
+    <article class="card-box">
+      <h1 id="termsTitle">Termos de Uso</h1>
+      <p class="mut">Versão 4.0 · Projeto acadêmico</p>
+      <h2>1. O serviço</h2>
+      <p>O FoodFind ajuda a encontrar restaurantes, consultar informações e resgatar descontos oferecidos pelos próprios estabelecimentos. O FoodFind não processa pedidos nem pagamentos.</p>
+      <h2>2. Contas</h2>
+      <p>Você é responsável pela sua senha. Contas do tipo Cliente avaliam e resgatam benefícios; contas do tipo Restaurante cadastram estabelecimentos e campanhas.</p>
+      <h2>3. Avaliações</h2>
+      <p>As avaliações devem refletir experiências reais. Não publique dados pessoais, ofensas ou propaganda.</p>
+      <h2>4. Campanhas e vouchers</h2>
+      <p>O restaurante define as regras de cada campanha. Cada cliente pode resgatar uma vez por campanha. O voucher vale até o fim da campanha e só pode ser usado uma vez.</p>
+      <h2>5. Restaurantes do OpenStreetMap</h2>
+      <p>Para assumir um estabelecimento que já aparece no mapa, o responsável envia um pedido, que é analisado por um administrador.</p>
+      <h2>6. Limitações</h2>
+      <p>Dados públicos do OpenStreetMap podem estar incompletos ou desatualizados. Este é um projeto acadêmico, oferecido sem garantias.</p>
+    </article>
+  </section>
+</main>
+
+<footer>
+  <div class="foot-brand">
+    <img src="icons/icon.svg" alt="" width="40" height="40">
+    <div><b>Food<em>Find</em></b><span>Comida boa, perto de você.</span></div>
+  </div>
+  <nav aria-label="Informações legais"><a href="#/privacidade">Privacidade</a><a href="#/termos">Termos de uso</a></nav>
+  <small class="foot-meta">FoodFind <span id="appVersion">4.0.0</span> · FATEC Ipiranga · ADS · Mapa © colaboradores do OpenStreetMap</small>
+</footer>
+
+<!-- Login e cadastro -->
+<div id="authModal" class="modal-overlay hide" data-modal>
+  <div class="modal-content auth-card" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+    <!-- Lado ilustrado (inspirado no "Modern Animated Sign In" do 21st.dev): ondas e comidas em órbita em volta da marca. -->
+    <div class="auth-art" aria-hidden="true">
+      <div class="ripple"><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="orbit orbit-in"><span class="orb"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-pizza"></use></svg></span><span class="orb"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-coffee"></use></svg></span><span class="orb"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-burger"></use></svg></span><span class="orb"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-beer"></use></svg></span></div>
+      <div class="orbit orbit-out"><span class="orb"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-bread"></use></svg></span><span class="orb"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-icecream"></use></svg></span><span class="orb"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-cake"></use></svg></span><span class="orb"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-utensils"></use></svg></span><span class="orb"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-ticket"></use></svg></span><span class="orb"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-star"></use></svg></span></div>
+      <img class="auth-logo" src="icons/icon.svg" alt="" width="72" height="72">
+      <p class="auth-art-text"><b>Comida boa, perto de você.</b><span>Avalie lugares, guarde descontos e resgate no balcão.</span></p>
+    </div>
+
+    <div class="auth-main">
+      <button type="button" class="modal-close" data-action="close-modal" aria-label="Fechar"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
+      <h2 id="authTitle" class="sr-only">Entrar ou criar conta</h2>
+      <div class="modal-tabs" role="tablist" data-mode="login">
+        <span class="tabs-light" aria-hidden="true"></span>
+        <button type="button" id="tabLogin" class="tab-btn active" role="tab" aria-selected="true" aria-controls="formLogin" data-action="auth-tab" data-mode="login">Entrar</button>
+        <button type="button" id="tabRegister" class="tab-btn" role="tab" aria-selected="false" aria-controls="formRegister" data-action="auth-tab" data-mode="register">Criar conta</button>
+      </div>
+      <div id="authNotice" class="notice hide"></div>
+      <div id="modalError" class="modal-error hide" role="alert"></div>
+
+      <form id="formLogin" class="auth-form" data-form="login" role="tabpanel" aria-labelledby="tabLogin">
+        <h3>Bem-vindo de volta</h3>
+        <p class="modal-desc">Entre para avaliar restaurantes e ver seus benefícios.</p>
+      <div class="form-group auth-field"><label for="loginEmail">E-mail</label>
+        <div class="field-box"><svg class="i field-icon" aria-hidden="true" focusable="false"><use href="#i-mail"></use></svg><input id="loginEmail" type="email" placeholder="seu@email.com" required autocomplete="email"></div></div>
+      <div class="form-group auth-field"><label for="loginPassword">Senha</label>
+        <div class="field-box"><svg class="i field-icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg><input id="loginPassword" type="password" placeholder="Sua senha" required autocomplete="current-password"><button type="button" class="pw-toggle" data-action="toggle-password" data-target="loginPassword" aria-pressed="false" aria-label="Mostrar senha"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-eye"></use></svg></button></div></div>
+        <button type="submit" class="submit-btn"><span>Entrar</span><svg class="i" aria-hidden="true" focusable="false"><use href="#i-arrow"></use></svg></button>
+        <p class="hint center">Esqueceu a senha? Peça ao administrador do FoodFind para redefini-la.</p>
+      </form>
+
+      <form id="formRegister" class="auth-form hide" data-form="register" role="tabpanel" aria-labelledby="tabRegister">
+        <h3>Crie sua conta</h3>
+        <p class="modal-desc">Leva menos de um minuto. Escolha como vai usar o FoodFind.</p>
+        <fieldset class="form-group">
+          <legend class="label">Tipo de conta</legend>
+          <div class="role-options">
+            <label class="role-opt"><input type="radio" name="regRole" value="cliente" checked><span><svg class="i" aria-hidden="true" focusable="false"><use href="#i-user"></use></svg> Cliente<small>Quero encontrar restaurantes</small></span></label>
+            <label class="role-opt"><input type="radio" name="regRole" value="restaurante"><span><svg class="i" aria-hidden="true" focusable="false"><use href="#i-store"></use></svg> Restaurante<small>Quero cadastrar meu estabelecimento</small></span></label>
+          </div>
+        </fieldset>
+      <div class="form-group auth-field"><label for="regName">Nome completo</label>
+        <div class="field-box"><svg class="i field-icon" aria-hidden="true" focusable="false"><use href="#i-user"></use></svg><input id="regName" type="text" placeholder="Ex.: Pedro Silva" required maxlength="100" autocomplete="name"></div></div>
+      <div class="form-group auth-field"><label for="regEmail">E-mail</label>
+        <div class="field-box"><svg class="i field-icon" aria-hidden="true" focusable="false"><use href="#i-mail"></use></svg><input id="regEmail" type="email" placeholder="seu@email.com" required autocomplete="email"></div></div>
+      <div class="form-group auth-field"><label for="regPassword">Senha</label>
+        <div class="field-box"><svg class="i field-icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg><input id="regPassword" type="password" placeholder="Mínimo de 8 caracteres" minlength="8" required autocomplete="new-password" aria-describedby="pwMeter"><button type="button" class="pw-toggle" data-action="toggle-password" data-target="regPassword" aria-pressed="false" aria-label="Mostrar senha"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-eye"></use></svg></button></div></div>
+        <div class="pw-meter" id="pwMeter" aria-live="polite"><span class="pw-bar"><i></i></span><small>Use pelo menos 8 caracteres.</small></div>
+        <label class="terms-check"><input type="checkbox" id="regTerms" required><span>Li e aceito os <a href="#/termos" data-action="close-modal">Termos de Uso</a> e a <a href="#/privacidade" data-action="close-modal">Política de Privacidade</a>.</span></label>
+        <button type="submit" class="submit-btn"><span>Criar conta</span><svg class="i" aria-hidden="true" focusable="false"><use href="#i-arrow"></use></svg></button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Leitor de QR Code -->
+<div id="scanModal" class="modal-overlay hide" data-modal>
+  <div class="modal-content wide" role="dialog" aria-modal="true" aria-labelledby="scanTitle">
+    <button type="button" class="modal-close" data-action="close-modal" aria-label="Fechar"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
+    <h2 id="scanTitle">Ler QR Code da campanha</h2>
+    <p class="modal-desc">Aponte a câmera para o QR Code exposto no restaurante ou digite o código impresso abaixo dele.</p>
+    <div id="scanArea" class="scan-area">
+      <video id="scanVideo" playsinline muted class="hide" aria-label="Imagem da câmera"></video>
+      <canvas id="scanCanvas" class="hide" aria-hidden="true"></canvas>
+      <div id="scanStatus" class="scan-status" role="status" aria-live="polite"></div>
+      <button type="button" class="soft" id="scanStart" data-action="scan-start"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-qr"></use></svg> Abrir câmera</button>
+    </div>
+    <form data-form="redeem" class="redeem-form">
+      <label for="redeemCode">Código da campanha</label>
+      <div class="inline">
+        <input id="redeemCode" placeholder="Ex.: ABCD-EFGH-JKLM-NPQR" autocomplete="off" autocapitalize="characters" required>
+        <button type="submit" class="primary">Resgatar</button>
+      </div>
+      <div id="redeemMessage" role="alert"></div>
+    </form>
+  </div>
+</div>
+
+<!-- Comprovante do voucher -->
+<div id="voucherModal" class="modal-overlay hide" data-modal>
+  <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="voucherModalTitle">
+    <button type="button" class="modal-close" data-action="close-modal" aria-label="Fechar"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
+    <div id="voucherBody"></div>
+  </div>
+</div>
+
+<!-- QR Code da campanha (dono) -->
+<div id="qrModal" class="modal-overlay hide" data-modal>
+  <div class="modal-content wide" role="dialog" aria-modal="true" aria-labelledby="qrModalTitle">
+    <button type="button" class="modal-close" data-action="close-modal" aria-label="Fechar"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
+    <div id="qrBody"></div>
+  </div>
+</div>
+
+<!-- Lista de vouchers de uma campanha -->
+<div id="listModal" class="modal-overlay hide" data-modal>
+  <div class="modal-content wide" role="dialog" aria-modal="true" aria-labelledby="listModalTitle">
+    <button type="button" class="modal-close" data-action="close-modal" aria-label="Fechar"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
+    <div id="listBody"></div>
+  </div>
+</div>
+
+<!-- Confirmação (com senha opcional) -->
+<div id="confirmModal" class="modal-overlay hide" data-modal>
+  <form class="modal-content" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmText" data-form="confirm">
+    <h2 id="confirmTitle">Confirmar</h2>
+    <p id="confirmText"></p>
+    <div id="confirmExtra"></div>
+    <div id="confirmError" class="modal-error hide" role="alert"></div>
+    <div class="form-actions">
+      <button type="button" class="soft" data-action="close-modal">Cancelar</button>
+      <button type="submit" class="danger" id="confirmOk">Confirmar</button>
+    </div>
+  </form>
+</div>
+
+<!-- Cartaz para impressão (A5) -->
+<div id="printArea" class="print-area" aria-hidden="true"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" integrity="sha384-eXVCORTRlv4FUUgS/xmOyr66XBVraen8ATNLMESp92FKXLAMiKkerixTiBvXriZr" crossorigin="anonymous"></script>
+<script src="glassfold.js?v=4.0.0"></script>
+<script src="fluxo.js?v=4.0.0"></script>
+<script src="app.js?v=4.0.0"></script>
+</body>
+</html>

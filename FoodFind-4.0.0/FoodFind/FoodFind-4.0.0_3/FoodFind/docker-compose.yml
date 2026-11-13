@@ -1,0 +1,22 @@
+services:
+  foodfind:
+    build: .
+    image: foodfind:4.0.0
+    container_name: foodfind
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      PORT: "3000"
+      PUBLIC_URL: "${PUBLIC_URL:-}"
+      ADMIN_EMAIL: "${ADMIN_EMAIL:-admin@foodfind.local}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+      FOODFIND_DATA_DIR: /app/data
+      FOODFIND_BACKUP_DIR: /app/data/backups
+      TRUST_PROXY: "${TRUST_PROXY:-0}"
+    volumes:
+      # Volume nomeado: o banco e as fotos sobrevivem a "docker compose down" e à recriação do container.
+      - foodfind-data:/app/data
+
+volumes:
+  foodfind-data:
