@@ -1,0 +1,23 @@
+{
+  "name": "foodfind",
+  "version": "4.0.0",
+  "description": "FoodFind: descubra restaurantes próximos, veja perfil, cardápio, fotos e avaliações e resgate descontos por QR Code.",
+  "private": true,
+  "license": "UNLICENSED",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "start:env": "node --env-file=.env server.js",
+    "dev": "node server.js --dev",
+    "test": "node --test",
+    "seed": "node scripts/seed.js",
+    "backup": "node scripts/backup.js"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "sql.js": "^1.14.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

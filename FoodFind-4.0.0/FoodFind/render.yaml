@@ -1,0 +1,33 @@
+# Publicação gratuita no Render (https://render.com) a partir deste repositório.
+# Como usar: README → "Publicar grátis no Render".
+#
+# Limitações do plano gratuito do Render:
+# - O serviço "dorme" após 15 minutos sem acesso e leva cerca de 1 minuto para acordar.
+# - O disco é apagado ao reiniciar, dormir ou publicar uma nova versão.
+#   Por isso, a cada inicialização os dados de demonstração são recriados
+#   (npm run seed) antes de subir o servidor: o sistema sempre volta ao estado da demonstração.
+services:
+  - type: web
+    name: foodfind
+    runtime: docker
+    plan: free
+    region: virginia
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # Cria os dados de demonstração (se ainda não existirem) e depois sobe o servidor.
+    # O ";" garante que o servidor sobe mesmo que o seed falhe.
+    dockerCommand: sh -c "node scripts/seed.js; exec node server.js"
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: PORT
+        value: "3000"
+      # O Render entrega as requisições por um proxy HTTPS; o FoodFind passa a confiar nos cabeçalhos X-Forwarded-*.
+      - key: TRUST_PROXY
+        value: "1"
+      - key: ADMIN_EMAIL
+        value: admin@foodfind.local
+      # Senha de TODAS as contas de demonstração (inclusive a do administrador).
+      # O Render pede este valor ao criar o serviço; não use a senha padrão do README.
+      - key: SEED_PASSWORD
+        sync: false
