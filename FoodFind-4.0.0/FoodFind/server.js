@@ -119,6 +119,19 @@ function requireClient(req, message) {
   return user;
 }
 
+// Envio de fotos: donos de restaurante e o administrador (que cadastra lugares do mapa).
+function requireOwnerOrAdmin(req) {
+  const user = requireUser(req);
+  if (user.role !== 'restaurante' && !isAdmin(user)) throw httpError(403, 'Apenas contas do tipo Restaurante podem gerenciar restaurantes.', 'not_restaurant');
+  return user;
+}
+
+function adminUserId() {
+  if (!ADMIN_EMAIL) return null;
+  const row = db.get('SELECT id FROM users WHERE email = ?', [ADMIN_EMAIL]);
+  return row ? row.id : null;
+}
+
 function requireAdmin(req) {
   const user = requireUser(req);
   if (!isAdmin(user)) throw httpError(403, 'Apenas o administrador pode acessar esta área.', 'not_admin');
@@ -232,7 +245,7 @@ function editableRestaurant(row) {
   };
 }
 
-function publicRestaurant(row, center, summaries) {
+function publicRestaurant(row, center, summaries, adminId = adminUserId()) {
   const photos = safeJson(row.photos, []);
   const schedule = safeJson(row.hours, {});
   const km = center ? haversine(center.lat, center.lng, row.lat, row.lng) : null;
@@ -241,6 +254,7 @@ function publicRestaurant(row, center, summaries) {
     id: `ff-${row.id}`,
     registered: true,
     ownerId: row.owner_id,
+    adminOwned: adminId != null && row.owner_id === adminId,
     osmRef: row.osm_ref,
     name: row.name,
     category: row.category || 'Restaurante',
@@ -291,7 +305,9 @@ function numParam(u, name) {
   return Number.isFinite(n) ? n : null;
 }
 
-async function searchRestaurants(u) {
+// opts.includeUnnamed: inclui lugares do OSM sem nome (só na tela do administrador).
+// opts.keep: filtro extra; opts.max: quantidade máxima devolvida.
+async function searchRestaurants(u, { includeUnnamed = false, keep = null, max = MAX_RESULTS } = {}) {
   let lat = numParam(u, 'lat'), lng = numParam(u, 'lng');
   if (lat === null || lng === null || Math.abs(lat) > 90 || Math.abs(lng) > 180) ({ lat, lng } = DEFAULT_LOCATION);
   let radius = numParam(u, 'radius');
@@ -323,15 +339,17 @@ async function searchRestaurants(u) {
   const linkedRefs = new Set(registered.map(r => r.osm_ref).filter(Boolean));
   const center = { lat, lng };
   const summaries = ratingSummaries();
+  const adminId = adminUserId();
 
   const list = places.filter(o => {
     if (linkedRefs.has(o.id)) return false;
+    if (!includeUnnamed && osm.isUnnamed(o)) return false;
     const n = normalizeName(o.name);
     return !registered.some(r => !r.osm_ref && normalizeName(r.name) === n && haversine(r.lat, r.lng, o.lat, o.lng) < 0.15);
   }).map(o => publicOsm(o, center, summaries)).filter(o => o.distanceKm <= radius);
 
   for (const r of registered) {
-    if (haversine(lat, lng, r.lat, r.lng) <= radius) list.push(publicRestaurant(r, center, summaries));
+    if (haversine(lat, lng, r.lat, r.lng) <= radius) list.push(publicRestaurant(r, center, summaries, adminId));
   }
 
   const term = normalizeName(q);
@@ -344,6 +362,7 @@ async function searchRestaurants(u) {
     if (price && r.priceRange !== price) return false;
     if (openOnly && r.openNow !== true) return false;
     if (minRating && !(r.rating >= minRating)) return false;
+    if (keep && !keep(r)) return false;
     return true;
   });
 
@@ -357,7 +376,7 @@ async function searchRestaurants(u) {
     center, radiusKm: radius,
     filters: { q, category, price, open: openOnly, minRating, sort },
     total: filtered.length,
-    restaurants: filtered.slice(0, MAX_RESULTS),
+    restaurants: filtered.slice(0, max),
     warning
   };
 }
@@ -774,12 +793,13 @@ async function api(req, res, u) {
       const lat = numParam(u, 'lat'), lng = numParam(u, 'lng');
       const center = lat !== null && lng !== null ? { lat, lng } : null;
       const found = await resolvePlace(ref);
-      if (found.row) return send(res, 200, { restaurant: publicRestaurant(found.row, center) });
-      const pub = publicOsm(found.place, center);
-      if (user && user.role === 'restaurante') {
-        const claim = db.get('SELECT * FROM claims WHERE osm_ref = ? AND user_id = ? ORDER BY id DESC LIMIT 1', [ref, user.id]);
+      const pub = found.row ? publicRestaurant(found.row, center) : publicOsm(found.place, center);
+      // Lugar do mapa (ou cadastrado pelo administrador a partir do mapa): o dono pode pedir para assumir.
+      const claimRef = found.row ? (pub.adminOwned && found.row.osm_ref) : ref;
+      if (claimRef && user && user.role === 'restaurante') {
+        const claim = db.get('SELECT * FROM claims WHERE osm_ref = ? AND user_id = ? ORDER BY id DESC LIMIT 1', [claimRef, user.id]);
         pub.myClaim = claim ? claimView(claim) : null;
-        pub.claimPending = Boolean(db.get("SELECT id FROM claims WHERE osm_ref = ? AND status = 'pendente'", [ref]));
+        pub.claimPending = Boolean(db.get("SELECT id FROM claims WHERE osm_ref = ? AND status = 'pendente'", [claimRef]));
       }
       return send(res, 200, { restaurant: pub });
     }
@@ -898,7 +918,7 @@ async function api(req, res, u) {
   }
 
   if (p === '/api/uploads' && method === 'POST') {
-    const user = requireRestaurantUser(req);
+    const user = requireOwnerOrAdmin(req);
     const b = await readBody(req, 8 * 1024 * 1024);
     const match = String(b.dataUrl || '').match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
     if (!match) throw httpError(400, 'Envie uma imagem JPG, PNG ou WEBP.', 'invalid_image');
@@ -924,7 +944,8 @@ async function api(req, res, u) {
     const b = await readBody(req);
     const ref = String(b.osmRef || '');
     if (!osm.OSM_REF.test(ref)) throw httpError(400, 'Restaurante do mapa inválido.', 'invalid_ref');
-    if (db.get('SELECT id FROM restaurants WHERE osm_ref = ?', [ref])) throw httpError(409, 'Este restaurante já foi assumido por um dono.', 'already_claimed');
+    const existing = db.get('SELECT owner_id FROM restaurants WHERE osm_ref = ?', [ref]);
+    if (existing && existing.owner_id !== adminUserId()) throw httpError(409, 'Este restaurante já foi assumido por um dono.', 'already_claimed');
     const pending = db.get("SELECT user_id FROM claims WHERE osm_ref = ? AND status = 'pendente'", [ref]);
     if (pending) throw httpError(409, pending.user_id === user.id ? 'Você já enviou um pedido para este restaurante. Aguarde a análise.' : 'Já existe um pedido em análise para este restaurante.', 'claim_pending');
     const r = cleanRestaurant(b, ownedFiles(user.id));
@@ -968,8 +989,20 @@ async function api(req, res, u) {
       deletePhotosIfUnused(photoFiles(safeJson(c.data, {}).photos));
       return send(res, 200, { claim: claimView(db.get('SELECT * FROM claims WHERE id = ?', [c.id])) });
     }
-    if (db.get('SELECT id FROM restaurants WHERE osm_ref = ?', [c.osm_ref])) throw httpError(409, 'Este restaurante já foi assumido.', 'already_claimed');
+    const existing = db.get('SELECT * FROM restaurants WHERE osm_ref = ?', [c.osm_ref]);
+    if (existing && existing.owner_id !== admin.id) throw httpError(409, 'Este restaurante já foi assumido.', 'already_claimed');
     const r = safeJson(c.data, {});
+    if (existing) {
+      // Lugar cadastrado pelo administrador: o dono assume o perfil como está (fotos, cardápio e horários).
+      db.tx(() => {
+        db.run('UPDATE restaurants SET owner_id = ?, updated_at = ? WHERE id = ?', [c.user_id, now, existing.id]);
+        for (const f of photoFiles(existing.photos)) db.run('UPDATE uploads SET owner_id = ? WHERE file = ?', [c.user_id, f]);
+        db.run("UPDATE claims SET status = 'aprovado', restaurant_id = ?, decided_at = ?, decided_by = ? WHERE id = ?", [existing.id, now, admin.id, c.id]);
+        db.run("UPDATE claims SET status = 'recusado', reason = 'Outro pedido para este restaurante foi aprovado.', decided_at = ?, decided_by = ? WHERE osm_ref = ? AND status = 'pendente'", [now, admin.id, c.osm_ref]);
+      });
+      deletePhotosIfUnused(photoFiles(r.photos));
+      return send(res, 200, { claim: claimView(db.get('SELECT * FROM claims WHERE id = ?', [c.id])), restaurantId: `ff-${existing.id}` });
+    }
     const restaurantId = db.tx(() => {
       const id = db.run(
         `INSERT INTO restaurants (owner_id, osm_ref, ${FIELDS.join(', ')}, created_at, updated_at) VALUES (?, ?, ${FIELDS.map(() => '?').join(', ')}, ?, ?)`,
@@ -980,6 +1013,57 @@ async function api(req, res, u) {
       return id;
     });
     return send(res, 200, { claim: claimView(db.get('SELECT * FROM claims WHERE id = ?', [c.id])), restaurantId: `ff-${restaurantId}` });
+  }
+
+  // ---------------- Administração: estabelecimentos (inclui os sem nome do mapa) ----------------
+  if (p === '/api/admin/places' && method === 'GET') {
+    requireAdmin(req);
+    const show = u.searchParams.get('show');
+    const keep = show === 'unnamed' ? r => r.unnamed === true
+      : show === 'osm' ? r => !r.registered
+      : show === 'registered' ? r => r.registered
+      : null;
+    return send(res, 200, await searchRestaurants(u, { includeUnnamed: true, keep, max: 1000 }));
+  }
+
+  // Cadastra no FoodFind um lugar do mapa, em nome do administrador (o dono pode pedir para assumir depois).
+  if (p === '/api/admin/places' && method === 'POST') {
+    const admin = requireAdmin(req);
+    const b = await readBody(req);
+    const ref = String(b.osmRef || '');
+    if (!osm.OSM_REF.test(ref)) throw httpError(400, 'Estabelecimento do mapa inválido.', 'invalid_ref');
+    if (db.get('SELECT id FROM restaurants WHERE osm_ref = ?', [ref])) throw httpError(409, 'Este estabelecimento já está cadastrado no FoodFind.', 'already_registered');
+    const r = cleanRestaurant(b, ownedFiles(admin.id));
+    const now = nowIso();
+    const id = db.run(
+      `INSERT INTO restaurants (owner_id, osm_ref, ${FIELDS.join(', ')}, created_at, updated_at) VALUES (?, ?, ${FIELDS.map(() => '?').join(', ')}, ?, ?)`,
+      [admin.id, ref, ...FIELDS.map(f => r[f]), now, now]
+    );
+    return send(res, 201, { restaurant: editableRestaurant(db.get('SELECT * FROM restaurants WHERE id = ?', [id])) });
+  }
+
+  m = p.match(/^\/api\/admin\/restaurants\/(\d{1,9})$/);
+  if (m && ['GET', 'PUT', 'DELETE'].includes(method)) {
+    const admin = requireAdmin(req);
+    const row = db.get('SELECT * FROM restaurants WHERE id = ?', [Number(m[1])]);
+    if (!row) throw httpError(404, 'Restaurante não encontrado.', 'not_found');
+    if (method === 'GET') return send(res, 200, { restaurant: { ...editableRestaurant(row), adminOwned: row.owner_id === admin.id } });
+    if (method === 'DELETE') {
+      // Só os cadastrados pelo administrador; o lugar volta a aparecer como veio do mapa.
+      if (row.owner_id !== admin.id) throw httpError(403, 'Só é possível remover estabelecimentos cadastrados pelo administrador.', 'not_admin_owned');
+      deleteRestaurantCascade(row);
+      return send(res, 200, { ok: true });
+    }
+    // Pode manter as fotos que o restaurante já tem e usar as que o administrador enviou.
+    const allowed = new Set([...ownedFiles(admin.id), ...photoFiles(row.photos)]);
+    const r = cleanRestaurant(await readBody(req), allowed);
+    db.tx(() => {
+      db.run(`UPDATE restaurants SET ${FIELDS.map(f => `${f} = ?`).join(', ')}, updated_at = ? WHERE id = ?`, [...FIELDS.map(f => r[f]), nowIso(), row.id]);
+      // Fotos novas passam a ser do dono do restaurante, para ele continuar podendo editá-las.
+      if (row.owner_id !== admin.id) for (const f of photoFiles(r.photos)) db.run('UPDATE uploads SET owner_id = ? WHERE file = ? AND owner_id = ?', [row.owner_id, f, admin.id]);
+    });
+    deletePhotosIfUnused(photoFiles(row.photos).filter(f => !photoFiles(r.photos).includes(f)));
+    return send(res, 200, { restaurant: editableRestaurant(db.get('SELECT * FROM restaurants WHERE id = ?', [row.id])) });
   }
 
   // ---------------- Administração: usuários e resumo ----------------

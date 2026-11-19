@@ -1,0 +1,25 @@
+# Dependências
+node_modules/
+
+# Dados locais (banco SQLite, fotos enviadas e backups) — nunca versionar
+data/
+backups/
+uploads/
+*.db
+*.db-journal
+*.tmp
+
+# Variáveis de ambiente
+.env
+.env.*
+!.env.example
+
+# Sistema e editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+npm-debug.log*
+coverage/
+foodfind.lock
+.neon

@@ -282,6 +282,9 @@ Erros do resgate:
 | POST | `/api/admin/claims/:id/reject` | Recusa (`reason`) |
 | GET | `/api/admin/users?q=&role=&page=&limit=` | Contas: nome, e-mail, tipo, cadastro, último acesso e atividade (sem senha) |
 | GET | `/api/admin/stats` | Totais e série dos últimos 14 dias (visitas, cadastros, resgates) |
+| GET | `/api/admin/places?lat=&lng=&radius=&q=&show=` | Estabelecimentos da região, **inclusive os sem nome do OpenStreetMap** (escondidos da busca pública); `show` = `unnamed`, `osm` ou `registered` |
+| POST | `/api/admin/places` | Cadastra no FoodFind um lugar do mapa (`osmRef` + dados do formulário), em nome do administrador |
+| GET/PUT/DELETE | `/api/admin/restaurants/:id` | Lê ou edita qualquer restaurante; `DELETE` só desfaz cadastros feitos pelo administrador |
 | POST | `/api/admin/users/reset-password` | Gera senha temporária para `email` |
 | GET | `/api/map-check` | Diagnóstico dos servidores de mapa (admin ou modo dev) |
 
